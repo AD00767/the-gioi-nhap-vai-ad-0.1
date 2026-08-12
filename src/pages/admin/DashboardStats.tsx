@@ -6,7 +6,8 @@ import {
   Activity, RefreshCw, AlertCircle, Play, CheckCircle2, Terminal,
   ChevronRight
 } from 'lucide-react';
-import { collection, getDocs, query, where, doc, updateDoc, limit } from 'firebase/firestore';
+import { collection, query, where, doc, limit } from 'firebase/firestore';
+import { safeGetDocs, safeUpdateDoc } from '../../lib/firestoreUtils';
 import { db } from '../../lib/firebase';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, 
@@ -52,11 +53,11 @@ export default function DashboardStats() {
     const fetchStatsAndData = async () => {
       try {
         setQuotaError(null);
-        const usersSnap = await getDocs(query(collection(db, 'users'), limit(500)));
-        const charsSnap = await getDocs(query(collection(db, 'characters'), limit(500)));
-        const promptsSnap = await getDocs(query(collection(db, 'prompts'), limit(500)));
-        const reportsSnap = await getDocs(query(collection(db, 'reports'), where('status', '==', 'PENDING'), limit(500)));
-        const requestsSnap = await getDocs(query(collection(db, 'creator_requests'), where('status', '==', 'PENDING'), limit(500)));
+        const usersSnap = await safeGetDocs(query(collection(db, 'users'), limit(500)));
+        const charsSnap = await safeGetDocs(query(collection(db, 'characters'), limit(500)));
+        const promptsSnap = await safeGetDocs(query(collection(db, 'prompts'), limit(500)));
+        const reportsSnap = await safeGetDocs(query(collection(db, 'reports'), where('status', '==', 'PENDING'), limit(500)));
+        const requestsSnap = await safeGetDocs(query(collection(db, 'creator_requests'), where('status', '==', 'PENDING'), limit(500)));
 
         const allUsers = usersSnap.docs.map(d => d.data());
         const allChars = charsSnap.docs.map(d => d.data());
@@ -170,15 +171,15 @@ export default function DashboardStats() {
 
       // 1. Migrate Users
       addLog("Đang quét danh sách người dùng...");
-      const usersSnap = await getDocs(query(collection(db, 'users'), limit(500)));
+      const usersSnap = await safeGetDocs(query(collection(db, 'users'), limit(500)));
       const unmigratedUsers = usersSnap.docs.filter(d => !d.data().numericId || String(d.data().numericId).length !== 9);
       addLog(`Tìm thấy ${unmigratedUsers.length} người dùng chưa có ID 9 chữ số.`);
 
       // Prepare characters/prompts unmigrated size
-      const charsSnap = await getDocs(query(collection(db, 'characters'), limit(500)));
+      const charsSnap = await safeGetDocs(query(collection(db, 'characters'), limit(500)));
       const unmigratedChars = charsSnap.docs.filter(d => !d.data().numericId || String(d.data().numericId).length !== 9);
       
-      const promptsSnap = await getDocs(query(collection(db, 'prompts'), limit(500)));
+      const promptsSnap = await safeGetDocs(query(collection(db, 'prompts'), limit(500)));
       const unmigratedPrompts = promptsSnap.docs.filter(d => !d.data().numericId || String(d.data().numericId).length !== 9);
 
       const totalToMigrate = unmigratedUsers.length + unmigratedChars.length + unmigratedPrompts.length;
@@ -196,7 +197,7 @@ export default function DashboardStats() {
         try {
           addLog(`Đang di trú User: ${userDoc.data().displayName || userDoc.id}...`);
           const nid = await generateUniqueId(db, 'user', userDoc.id);
-          await updateDoc(doc(db, 'users', userDoc.id), { numericId: nid });
+          await safeUpdateDoc(doc(db, 'users', userDoc.id), { numericId: nid });
           processed++;
           setMigrationProgress(Math.round((processed / totalToMigrate) * 100));
         } catch (e: any) {
@@ -212,7 +213,7 @@ export default function DashboardStats() {
         try {
           addLog(`Đang di trú Character: ${charDoc.data().name || charDoc.id}...`);
           const nid = await generateUniqueId(db, 'character', charDoc.id);
-          await updateDoc(doc(db, 'characters', charDoc.id), { numericId: nid });
+          await safeUpdateDoc(doc(db, 'characters', charDoc.id), { numericId: nid });
           processed++;
           setMigrationProgress(Math.round((processed / totalToMigrate) * 100));
         } catch (e: any) {
@@ -228,7 +229,7 @@ export default function DashboardStats() {
         try {
           addLog(`Đang di trú Prompt: ${promptDoc.data().title || promptDoc.data().name || promptDoc.id}...`);
           const nid = await generateUniqueId(db, 'prompt', promptDoc.id);
-          await updateDoc(doc(db, 'prompts', promptDoc.id), { numericId: nid });
+          await safeUpdateDoc(doc(db, 'prompts', promptDoc.id), { numericId: nid });
           processed++;
           setMigrationProgress(Math.round((processed / totalToMigrate) * 100));
         } catch (e: any) {
@@ -240,9 +241,9 @@ export default function DashboardStats() {
       toast.success("Di trú ID hoàn tất thành công!");
       
       // Refresh Stats
-      const usersSnapUpdated = await getDocs(query(collection(db, 'users'), limit(500)));
-      const charsSnapUpdated = await getDocs(query(collection(db, 'characters'), limit(500)));
-      const promptsSnapUpdated = await getDocs(query(collection(db, 'prompts'), limit(500)));
+      const usersSnapUpdated = await safeGetDocs(query(collection(db, 'users'), limit(500)));
+      const charsSnapUpdated = await safeGetDocs(query(collection(db, 'characters'), limit(500)));
+      const promptsSnapUpdated = await safeGetDocs(query(collection(db, 'prompts'), limit(500)));
       
       setMigrationStats({
         unmigratedUsers: usersSnapUpdated.docs.filter(d => !d.data().numericId || String(d.data().numericId).length !== 9).length,

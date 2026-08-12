@@ -6,10 +6,10 @@ import {
   MessageSquare, Search, Filter, Sparkles, ShieldAlert
 } from 'lucide-react';
 import { 
-  collection, query, getDocs, doc, updateDoc, 
-  orderBy, where, serverTimestamp, addDoc, getDoc 
-, limit
+  collection, query, doc, 
+  orderBy, where, serverTimestamp, limit
 } from 'firebase/firestore';
+import { safeGetDocs, safeGetDoc, safeUpdateDoc, safeAddDoc } from '../../lib/firestoreUtils';
 import { db } from '../../lib/firebase';
 import { useAuthStore } from '../../store/useAuthStore';
 import toast from 'react-hot-toast';
@@ -39,7 +39,7 @@ export default function CreatorManager() {
   const fetchUserDetails = async (userId: string) => {
     try {
       const userRef = doc(db, 'users', userId);
-      const userSnap = await getDoc(userRef);
+      const userSnap = await safeGetDoc(userRef);
       if (userSnap.exists()) {
         setSelectedUser(userSnap.data());
       }
@@ -56,7 +56,7 @@ export default function CreatorManager() {
         where('status', '==', filter),
         orderBy('createdAt', 'desc'), limit(100)
       );
-      const snap = await getDocs(q);
+      const snap = await safeGetDocs(q);
       setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err) {
       console.error("Error fetching requests:", err);
@@ -82,7 +82,7 @@ export default function CreatorManager() {
 
     try {
       const requestRef = doc(db, 'creator_requests', selectedRequest.id);
-      await updateDoc(requestRef, {
+      await safeUpdateDoc(requestRef, {
         status,
         moderatorId: currentUser.id,
         moderatorNote: note,
@@ -91,7 +91,7 @@ export default function CreatorManager() {
 
       if (status === 'APPROVED') {
         const userRef = doc(db, 'users', selectedRequest.userId);
-        await updateDoc(userRef, {
+        await safeUpdateDoc(userRef, {
           creatorStatus: true,
           updatedAt: serverTimestamp()
         });
@@ -99,14 +99,14 @@ export default function CreatorManager() {
         // Update global_ids mapping if numericId exists
         if (selectedUser?.numericId) {
           const idRef = doc(db, 'global_ids', selectedUser.numericId);
-          await updateDoc(idRef, {
+          await safeUpdateDoc(idRef, {
             objectType: 'creator',
             updatedAt: serverTimestamp()
           }).catch(err => console.log("Failed to update global_ids mapping:", err));
         }
 
         // Send notification
-        await addDoc(collection(db, 'notifications'), {
+        await safeAddDoc(collection(db, 'notifications'), {
           userId: selectedRequest.userId,
           title: 'Chúc mừng! Bạn đã trở thành Creator',
           content: 'Yêu cầu của bạn đã được phê duyệt. Bây giờ bạn có thể tạo Character và truy cập Bảng điều khiển Creator.',
@@ -118,7 +118,7 @@ export default function CreatorManager() {
         toast.success("Đã phê duyệt và cấp quyền Creator.");
       } else {
         // Send notification for rejection
-        await addDoc(collection(db, 'notifications'), {
+        await safeAddDoc(collection(db, 'notifications'), {
           userId: selectedRequest.userId,
           title: 'Yêu cầu trở thành Creator bị từ chối',
           content: `Rất tiếc, yêu cầu của bạn không được phê duyệt. Lý do: ${note}`,
@@ -131,7 +131,7 @@ export default function CreatorManager() {
       }
 
       // Audit Log
-      await addDoc(collection(db, 'audit_logs'), {
+      await safeAddDoc(collection(db, 'audit_logs'), {
         executorId: currentUser.id,
         executorName: currentUser.displayName,
         executorRole: currentUser.role,

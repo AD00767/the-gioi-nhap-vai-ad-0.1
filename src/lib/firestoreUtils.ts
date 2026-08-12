@@ -59,6 +59,17 @@ export function findLocalCollection(colName: string): any[] {
       return localDb.getAllReports();
     case 'audit_logs':
       return localDb.getAllAuditLogs();
+    case 'creator_requests':
+      return localDb.getAllCreatorRequests();
+    case 'creator_appeals':
+      return localDb.getAllCreatorAppeals();
+    case 'support_tickets':
+      return localDb.getAllSupportTickets();
+    case 'moderator_invites':
+      return localDb.getAllModeratorInvites();
+    case 'character_likes':
+    case 'likes':
+      return localDb.getAllLikes();
     default:
       return [];
   }
@@ -154,6 +165,12 @@ export async function safeAddDoc(colRef: any, data: any): Promise<any> {
         localDb.createBookmark({ ...data, id: docRef.id });
       } else if (colName === 'follows') {
         localDb.createFollow({ ...data, id: docRef.id });
+      } else if (colName === 'creator_requests') {
+        localDb.createCreatorRequest({ ...data, id: docRef.id });
+      } else if (colName === 'creator_appeals') {
+        localDb.createCreatorAppeal({ ...data, id: docRef.id });
+      } else if (colName === 'support_tickets') {
+        localDb.createSupportTicket({ ...data, id: docRef.id });
       }
     } catch (localErr) {
       console.log("Local sync failed after Firestore add:", localErr);
@@ -180,6 +197,12 @@ export async function safeAddDoc(colRef: any, data: any): Promise<any> {
       localDb.createBookmark({ ...data, id: newId });
     } else if (colName === 'follows') {
       localDb.createFollow({ ...data, id: newId });
+    } else if (colName === 'creator_requests') {
+      localDb.createCreatorRequest({ ...data, id: newId });
+    } else if (colName === 'creator_appeals') {
+      localDb.createCreatorAppeal({ ...data, id: newId });
+    } else if (colName === 'support_tickets') {
+      localDb.createSupportTicket({ ...data, id: newId });
     }
 
     return { id: newId };
@@ -207,6 +230,8 @@ export async function safeUpdateDoc(docRef: any, data: any): Promise<any> {
     localDb.updateUser(docId, data);
   } else if (colName === 'comments') {
     localDb.updateComment(docId, data);
+  } else if (colName === 'creator_requests') {
+    localDb.updateCreatorRequest(docId, data);
   }
 }
 
@@ -244,8 +269,11 @@ export async function safeSetDoc(docRef: any, data: any, options?: any): Promise
     await setDoc(docRef, data, options);
   } catch (err: any) {
     console.log("[Firestore Safe Wrapper] setDoc failed, fallback local set:", err?.message || err);
-    if (colName === 'users') {
-      localDb.updateUser(docId, data);
-    }
+  }
+
+  if (colName === 'users') {
+    localDb.updateUser(docId, data);
+  } else if (colName === 'creator_requests') {
+    localDb.updateCreatorRequest(docId, data);
   }
 }

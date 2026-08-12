@@ -11,6 +11,7 @@ import { doc, collection, query, where, serverTimestamp } from 'firebase/firesto
 import { safeGetDoc, safeGetDocs, safeUpdateDoc } from './lib/firestoreUtils';
 import { useAuthStore } from './store/useAuthStore';
 import toast, { Toaster } from 'react-hot-toast';
+import * as localDb from './lib/localDb';
 
 import Layout from './components/layout/Layout';
 import Welcome from './pages/Welcome';
@@ -48,120 +49,35 @@ export default function App() {
   useEffect(() => {
     initThemeAndFont();
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const userRef = doc(db, 'users', firebaseUser.uid);
-          const userSnap = await safeGetDoc(userRef);
-
-          // Check if any admin exists in the system
-          const adminQuery = query(collection(db, "users"), where("role", "==", "ADMIN"));
-          const adminSnap = await safeGetDocs(adminQuery);
-          const hasAdmin = !adminSnap.empty;
-
-          if (userSnap.exists()) {
-            let userData = userSnap.data();
-
-            if (userData.isLocked || userData.deletedAt) {
-              const { signOut } = await import('firebase/auth');
-              await signOut(auth);
-              
-              setTimeout(() => {
-                toast.error(userData.lockReason ? `Tài khoản đã bị khóa: ${userData.lockReason}` : "Tài khoản của bạn đã bị khóa hoặc vô hiệu hóa.");
-              }, 500);
-              
-              setAuth(null, null);
-              setInitialized(true);
-              return;
-            }
-
-            const isOwner = firebaseUser.email === 'nhuochy259@gmail.com';
-            
-            // Auto-upgrade owner to ADMIN and creator if they aren't already
-            if (isOwner && (userData.role !== 'ADMIN' || userData.creatorStatus !== true)) {
-              await safeUpdateDoc(userRef, { role: 'ADMIN', creatorStatus: true });
-              userData.role = 'ADMIN';
-              userData.creatorStatus = true;
-            }
-
-            // Ensure user immediately has a valid 9-digit numeric ID
-            if (!userData.numericId || String(userData.numericId).length !== 9) {
-              const { generateUniqueId } = await import('./lib/generateId');
-              const numericId = await generateUniqueId(db, userData.creatorStatus ? 'creator' : 'user', firebaseUser.uid);
-              await safeUpdateDoc(userRef, { numericId });
-              userData.numericId = numericId;
-            }
-            // Remove the auto-admin upgrade for arbitrary users
-            // if (!hasAdmin && userData.role !== 'ADMIN') {
-            //   await safeUpdateDoc(userRef, { role: 'ADMIN' });
-            //   userData.role = 'ADMIN';
-            // }
-            if (userData.themePreference) {
-              applyTheme(userData.themePreference);
-            }
-            setAuth(firebaseUser, { id: firebaseUser.uid, ...userData } as any);
-          } else {
-            // First time profile creation in auth listener
-            const { generateUniqueId } = await import('./lib/generateId');
-            const numericId = await generateUniqueId(db, 'user', firebaseUser.uid);
-            
-            const isOwner = firebaseUser.email === 'nhuochy259@gmail.com';
-            const newUserData = {
-              numericId,
-              email: firebaseUser.email,
-              displayName: firebaseUser.displayName || "User " + firebaseUser.uid.substring(0, 5),
-              avatar: firebaseUser.photoURL || "",
-              bio: "",
-              socialLinks: {},
-              role: isOwner ? "ADMIN" : "USER",
-              creatorStatus: isOwner ? true : false,
-              isLocked: false,
-              strikeCount: 0,
-              badges: [],
-              permissions: (isOwner || !hasAdmin) ? ["ALL"] : [],
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-              deletedAt: null
-            };
-            await safeUpdateDoc(userRef, newUserData).catch(async () => {
-              const { setDoc } = await import('firebase/firestore');
-              await setDoc(userRef, newUserData);
-            });
-            setAuth(firebaseUser, { id: firebaseUser.uid, ...newUserData } as any);
-          }
-        } catch (e) {
-          console.log("Notice: Failed to fetch user profile (using cached/default auth state):", e);
-          const cachedRole = localStorage.getItem('cached_user_role') || (firebaseUser.email === 'nhuochy259@gmail.com' ? "ADMIN" : "USER");
-          const cachedCreator = localStorage.getItem('cached_creator_status') === 'true' || cachedRole === 'ADMIN';
-
-          const fallbackUserData = {
-            id: firebaseUser.uid,
-            numericId: "USR-" + Math.floor(1000 + Math.random() * 9000),
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName || "User " + firebaseUser.uid.substring(0, 5),
-            avatar: firebaseUser.photoURL || "",
-            bio: "",
-            socialLinks: {},
-            role: cachedRole,
-            creatorStatus: cachedCreator,
-            isLocked: false,
-            strikeCount: 0,
-            badges: [],
-            permissions: cachedRole === 'ADMIN' ? ["ALL"] : [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            deletedAt: null
-          };
-          setAuth(firebaseUser, fallbackUserData);
+    try {
+      const { getCurrentUser, updateUser } = localDb;
+      const currentUser = getCurrentUser();
+      
+      if (currentUser) {
+        // Ensure user immediate settings are applied
+        if (currentUser.themePreference) {
+          applyTheme(currentUser.themePreference);
+        }
+        
+        // Auto-upgrade nhuchy259@gmail.com to ADMIN
+        const isOwner = currentUser.email?.toLowerCase() === 'nhuochy259@gmail.com';
+        if (isOwner && (currentUser.role !== 'ADMIN' || !currentUser.creatorStatus)) {
+          updateUser(currentUser.id, { role: 'ADMIN', creatorStatus: true });
+          const updatedUser = getCurrentUser();
+          setAuth({ uid: updatedUser.id, email: updatedUser.email, displayName: updatedUser.displayName, photoURL: updatedUser.avatar }, updatedUser);
+        } else {
+          setAuth({ uid: currentUser.id, email: currentUser.email, displayName: currentUser.displayName, photoURL: currentUser.avatar }, currentUser);
         }
       } else {
         setAuth(null, null);
       }
+    } catch (e) {
+      console.log("Notice: Local DB auth initialization failed:", e);
+      setAuth(null, null);
+    } finally {
       setInitialized(true);
-    });
-
-    return () => unsubscribe();
-  }, []);
+    }
+  }, [setAuth, setInitialized]);
 
   return (
     <BrowserRouter>

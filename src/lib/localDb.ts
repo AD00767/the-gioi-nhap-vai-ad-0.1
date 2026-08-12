@@ -187,6 +187,11 @@ const STORAGE_KEYS = {
   NOTIFICATIONS: 'thgegioinhapvai_notifications',
   REPORTS: 'thgegioinhapvai_reports',
   AUDIT_LOGS: 'thgegioinhapvai_audit_logs',
+  CREATOR_REQUESTS: 'thgegioinhapvai_creator_requests',
+  CREATOR_APPEALS: 'thgegioinhapvai_creator_appeals',
+  SUPPORT_TICKETS: 'thgegioinhapvai_support_tickets',
+  MODERATOR_INVITES: 'thgegioinhapvai_moderator_invites',
+  LIKES: 'thgegioinhapvai_likes',
   CURRENT_USER_ID: 'thgegioinhapvai_current_user_id',
 };
 
@@ -880,3 +885,74 @@ export function addAuditLog(log: Omit<AuditLogItem, 'id' | 'createdAt'>): void {
   });
   setStorage(STORAGE_KEYS.AUDIT_LOGS, logs);
 }
+
+// --- CREATOR REQUESTS & APPEALS & TICKETS ---
+export function getAllCreatorRequests(): any[] {
+  return getStorage<any[]>(STORAGE_KEYS.CREATOR_REQUESTS, []);
+}
+
+export function createCreatorRequest(data: any): any {
+  const list = getAllCreatorRequests();
+  const newItem = {
+    ...data,
+    id: data.id || 'req_' + Math.random().toString(36).substring(2, 9),
+    status: data.status || 'PENDING',
+    createdAt: data.createdAt || new Date().toISOString(),
+  };
+  list.unshift(newItem);
+  setStorage(STORAGE_KEYS.CREATOR_REQUESTS, list);
+  return newItem;
+}
+
+export function updateCreatorRequest(id: string, data: any): void {
+  const list = getAllCreatorRequests();
+  const item = list.find((r: any) => r.id === id || r.userId === id);
+  if (item) {
+    Object.assign(item, data);
+    setStorage(STORAGE_KEYS.CREATOR_REQUESTS, list);
+  } else {
+    list.unshift({ id, ...data, createdAt: new Date().toISOString() });
+    setStorage(STORAGE_KEYS.CREATOR_REQUESTS, list);
+  }
+}
+
+export function getAllCreatorAppeals(): any[] {
+  return getStorage<any[]>(STORAGE_KEYS.CREATOR_APPEALS, []);
+}
+
+export function createCreatorAppeal(data: any): any {
+  const list = getAllCreatorAppeals();
+  const newItem = {
+    ...data,
+    id: data.id || 'appeal_' + Math.random().toString(36).substring(2, 9),
+    createdAt: data.createdAt || new Date().toISOString(),
+  };
+  list.unshift(newItem);
+  setStorage(STORAGE_KEYS.CREATOR_APPEALS, list);
+  return newItem;
+}
+
+export function getAllSupportTickets(): any[] {
+  return getStorage<any[]>(STORAGE_KEYS.SUPPORT_TICKETS, []);
+}
+
+export function createSupportTicket(data: any): any {
+  const list = getAllSupportTickets();
+  const newItem = {
+    ...data,
+    id: data.id || 'ticket_' + Math.random().toString(36).substring(2, 9),
+    createdAt: data.createdAt || new Date().toISOString(),
+  };
+  list.unshift(newItem);
+  setStorage(STORAGE_KEYS.SUPPORT_TICKETS, list);
+  return newItem;
+}
+
+export function getAllModeratorInvites(): any[] {
+  return getStorage<any[]>(STORAGE_KEYS.MODERATOR_INVITES, []);
+}
+
+export function getAllLikes(): any[] {
+  return getStorage<any[]>(STORAGE_KEYS.LIKES, []);
+}
+

@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
-import { loginWithGoogle } from "../lib/firebase";
+import * as localDb from "../lib/localDb";
 import { Compass, LogIn } from "lucide-react";
 import { motion } from "motion/react";
 import { useSeo } from "../hooks/useSeo";
@@ -18,20 +18,62 @@ export default function Welcome() {
     description: 'Thế giới nhập vai_AD - Khởi đầu cho mọi hành trình Roleplay trên Google AI Studio. Khám phá Character, Prompt và kết nối với cộng đồng Creator.'
   });
 
+  const [showLoginModal, setShowLoginModal] = React.useState(false);
+  const [loginEmail, setLoginEmail] = React.useState("");
+  const [loginPassword, setLoginPassword] = React.useState("123456");
+
   if (user) {
     return <Navigate to={from} replace />;
   }
 
-  const handleLoginClick = async () => {
-    try {
-      await loginWithGoogle();
-      toast.success("Đăng nhập bằng Google thành công!");
-    } catch (e: any) {
-      if (e?.code === 'auth/popup-closed-by-user') return;
-      if (e?.code === 'auth/network-request-failed') {
-        toast.error("Không thể kết nối dịch vụ Google Auth. Vui lòng thử lại.");
+  const handleLoginClick = () => {
+    setShowLoginModal(true);
+  };
+
+  const handleLocalLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail.trim()) {
+      toast.error("Vui lòng nhập tên đăng nhập hoặc email.");
+      return;
+    }
+
+    const emailOrUser = loginEmail.trim();
+    const cleanKey = emailOrUser.toLowerCase();
+    const isOwner = cleanKey === 'nhuochy259@gmail.com';
+
+    const { login, register, refreshUser } = useAuthStore.getState();
+    const allUsers = localDb.getAllUsers();
+    
+    const existing = allUsers.find(
+      u => u.email.toLowerCase() === cleanKey || u.displayName.toLowerCase() === cleanKey
+    );
+
+    if (existing) {
+      if (isOwner && (existing.role !== 'ADMIN' || !existing.creatorStatus)) {
+        localDb.updateUser(existing.id, { role: 'ADMIN', creatorStatus: true });
+        refreshUser();
+      }
+      const res = login(emailOrUser, loginPassword);
+      if (res.success) {
+        toast.success("Đăng nhập thành công!");
+        setShowLoginModal(false);
       } else {
-        toast.error("Đăng nhập không thành công. Vui lòng thử lại.");
+        toast.error(res.error || "Mật khẩu không chính xác.");
+      }
+    } else {
+      const role = isOwner ? 'ADMIN' : 'USER';
+      const creatorStatus = isOwner ? true : false;
+      const regRes = register(emailOrUser, loginPassword, emailOrUser.split('@')[0]);
+      if (regRes.success) {
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser && isOwner) {
+          localDb.updateUser(currentUser.id, { role: 'ADMIN', creatorStatus: true });
+          refreshUser();
+        }
+        toast.success("Đăng ký & Đăng nhập tài khoản mới thành công!");
+        setShowLoginModal(false);
+      } else {
+        toast.error(regRes.error || "Đăng nhập thất bại.");
       }
     }
   };
@@ -110,6 +152,72 @@ export default function Welcome() {
           </div>
         </div>
       </footer>
+
+      {showLoginModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="relative bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-2xl w-full max-w-md p-6 sm:p-8 shadow-2xl">
+            <div className="text-center mb-6">
+              <h2 className="text-xl font-black tracking-tight text-neutral-900 dark:text-white uppercase">
+                Đăng Nhập Hệ Thống
+              </h2>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
+                Hệ thống lưu trữ tài khoản trực tiếp trong trình duyệt qua LocalStorage.
+              </p>
+            </div>
+
+            <form onSubmit={handleLocalLoginSubmit} className="space-y-4 text-left">
+              <div>
+                <label className="block text-xs font-black tracking-widest uppercase text-neutral-500 dark:text-neutral-400 mb-2">
+                  Tên đăng nhập hoặc Email
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nhập tên tài khoản hoặc email..."
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-800 text-neutral-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black tracking-widest uppercase text-neutral-500 dark:text-neutral-400 mb-2">
+                  Mật khẩu (Mặc định: 123456)
+                </label>
+                <input
+                  type="password"
+                  placeholder="Nhập mật khẩu..."
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-800 text-neutral-900 dark:text-white"
+                />
+              </div>
+
+              {loginEmail.trim().toLowerCase() === 'nhuochy259@gmail.com' && (
+                <div className="p-3 bg-neutral-100 dark:bg-neutral-900 rounded-lg text-xs font-bold text-neutral-600 dark:text-neutral-300">
+                  💡 Email chủ sở hữu: Bạn sẽ đăng nhập với vai trò ADMIN hệ thống.
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLoginModal(false)}
+                  className="flex-1 px-4 py-3 bg-neutral-100 dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300 font-bold rounded-xl text-sm hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-3 bg-black dark:bg-white text-white dark:text-black font-black rounded-xl text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-md"
+                >
+                  Xác nhận
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
