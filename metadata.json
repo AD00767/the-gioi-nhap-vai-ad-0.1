@@ -1,0 +1,8 @@
+{
+  "name": "Thế Giới Nhập Vai AD",
+  "description": "Cộng đồng Roleplay dành cho người dùng Google AI Studio. Khám phá, chia sẻ Character, Prompt và kết nối với các Creator hàng đầu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
