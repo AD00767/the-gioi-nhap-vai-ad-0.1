@@ -318,13 +318,13 @@ export default function CreatorDashboard() {
 
   // Filtered lists
   const filteredCharacters = characters.filter(c => 
-    c.name.toLowerCase().includes(charSearch.toLowerCase()) || 
-    c.slogan.toLowerCase().includes(charSearch.toLowerCase())
+    (c.name || '').toLowerCase().includes(charSearch.toLowerCase()) || 
+    (c.slogan || '').toLowerCase().includes(charSearch.toLowerCase())
   );
 
   const filteredPrompts = prompts.filter(p => 
-    p.name.toLowerCase().includes(promptSearch.toLowerCase()) || 
-    p.purpose.toLowerCase().includes(promptSearch.toLowerCase())
+    (p.name || p.title || '').toLowerCase().includes(promptSearch.toLowerCase()) || 
+    (p.purpose || '').toLowerCase().includes(promptSearch.toLowerCase())
   );
 
   const filteredFeedbacks = feedbacks.filter(fb => {

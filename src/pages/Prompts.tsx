@@ -109,9 +109,9 @@ export default function Prompts() {
     const term = searchTerm.toLowerCase().trim();
     const matchesSearch = 
       !term ||
-      p.name.toLowerCase().includes(term) ||
-      p.purpose.toLowerCase().includes(term) ||
-      p.content.toLowerCase().includes(term) ||
+      (p.name || p.title || '').toLowerCase().includes(term) ||
+      (p.purpose || '').toLowerCase().includes(term) ||
+      (p.content || '').toLowerCase().includes(term) ||
       (p.authorName && p.authorName.toLowerCase().includes(term)) ||
       (p.numericId && p.numericId.includes(term)) ||
       (p.id && p.id.includes(term));

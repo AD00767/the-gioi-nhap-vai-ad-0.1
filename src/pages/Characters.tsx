@@ -115,8 +115,8 @@ export default function Characters() {
       const term = searchTerm.toLowerCase().trim();
       const matchesSearch = 
         !term ||
-        c.name.toLowerCase().includes(term) ||
-        c.slogan.toLowerCase().includes(term) ||
+        (c.name || '').toLowerCase().includes(term) ||
+        (c.slogan || '').toLowerCase().includes(term) ||
         (c.plot && c.plot.toLowerCase().includes(term)) ||
         (c.creatorName && c.creatorName.toLowerCase().includes(term)) ||
         (c.numericId && c.numericId.includes(term)) ||

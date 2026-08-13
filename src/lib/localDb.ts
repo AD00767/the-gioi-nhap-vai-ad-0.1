@@ -370,13 +370,22 @@ export function getCharacterById(id: string): Character | null {
   return chars.find(c => c.id === id || c.numericId === id) || null;
 }
 
-export function createCharacter(charData: Omit<Character, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'>): Character {
+export function createCharacter(charData: any): Character {
   const chars = getStorage<Character[]>(STORAGE_KEYS.CHARACTERS, []);
   const now = new Date().toISOString();
-  const id = 'char_' + Math.random().toString(36).substring(2, 9);
-  const numericId = Math.floor(200000000 + Math.random() * 800000000).toString();
+  const id = charData.id || ('char_' + Math.random().toString(36).substring(2, 9));
+  const numericId = charData.numericId || Math.floor(200000000 + Math.random() * 800000000).toString();
 
   const newChar: Character = {
+    name: '',
+    avatar: '',
+    gender: 'Nam',
+    slogan: '',
+    plot: '',
+    characterLink: '',
+    creatorId: '',
+    tags: [],
+    category: '',
     ...charData,
     id,
     numericId,
@@ -384,9 +393,9 @@ export function createCharacter(charData: Omit<Character, 'id' | 'createdAt' | '
     likes: charData.likes || [],
     saves: charData.saves || [],
     isPinned: charData.isPinned || false,
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null,
+    createdAt: charData.createdAt || now,
+    updatedAt: charData.updatedAt || now,
+    deletedAt: charData.deletedAt || null,
   };
 
   chars.unshift(newChar);
@@ -464,13 +473,19 @@ export function getPromptById(id: string): Prompt | null {
   return prompts.find(p => p.id === id || p.numericId === id) || null;
 }
 
-export function createPrompt(promptData: Omit<Prompt, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'>): Prompt {
+export function createPrompt(promptData: any): Prompt {
   const prompts = getStorage<Prompt[]>(STORAGE_KEYS.PROMPTS, []);
   const now = new Date().toISOString();
-  const id = 'prompt_' + Math.random().toString(36).substring(2, 9);
-  const numericId = Math.floor(300000000 + Math.random() * 700000000).toString();
+  const id = promptData.id || ('prompt_' + Math.random().toString(36).substring(2, 9));
+  const numericId = promptData.numericId || Math.floor(300000000 + Math.random() * 700000000).toString();
 
   const newPrompt: Prompt = {
+    name: '',
+    purpose: '',
+    content: '',
+    authorId: '',
+    tags: [],
+    category: '',
     ...promptData,
     id,
     numericId,
@@ -478,9 +493,9 @@ export function createPrompt(promptData: Omit<Prompt, 'id' | 'createdAt' | 'upda
     copyCount: promptData.copyCount || 0,
     bookmarks: promptData.bookmarks || [],
     isPinned: promptData.isPinned || false,
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null,
+    createdAt: promptData.createdAt || now,
+    updatedAt: promptData.updatedAt || now,
+    deletedAt: promptData.deletedAt || null,
   };
 
   prompts.unshift(newPrompt);
