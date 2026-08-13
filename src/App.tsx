@@ -50,12 +50,23 @@ export default function App() {
     initThemeAndFont();
 
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      console.log("🔥 [Firebase Auth] onAuthStateChanged triggered!");
       try {
         if (firebaseUser) {
+          console.log("🔥 [Firebase Auth] User is LOGGED IN:", {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            emailVerified: firebaseUser.emailVerified,
+            isAnonymous: firebaseUser.isAnonymous,
+            metadata: firebaseUser.metadata
+          });
+
           const { getUserById, registerUser, updateUser } = localDb;
           let currentUser = getUserById(firebaseUser.uid);
           
           if (!currentUser) {
+            console.log("🔥 [Firebase Auth] User not found in LocalDB. Auto-registering user...");
             const isOwner = firebaseUser.email?.toLowerCase() === 'nhuochy259@gmail.com';
             const defaultEmail = firebaseUser.email || `user_${firebaseUser.uid.substring(0, 5)}@tgnhapvai.com`;
             const regRes = registerUser(
@@ -67,6 +78,9 @@ export default function App() {
               firebaseUser.uid
             );
             currentUser = regRes.user;
+            console.log("🔥 [Firebase Auth] LocalDB registration complete:", currentUser);
+          } else {
+            console.log("🔥 [Firebase Auth] Found existing user in LocalDB:", currentUser);
           }
 
           if (currentUser) {
@@ -76,20 +90,24 @@ export default function App() {
             
             const isOwner = currentUser.email?.toLowerCase() === 'nhuochy259@gmail.com';
             if (isOwner && (currentUser.role !== 'ADMIN' || !currentUser.creatorStatus)) {
+              console.log("🔥 [Firebase Auth] User is verified system Admin (nhuochy259@gmail.com). Ensuring ADMIN role & creatorStatus in LocalDB...");
               updateUser(currentUser.id, { role: 'ADMIN', creatorStatus: true });
               const updatedUser = getUserById(currentUser.id);
               setAuth(firebaseUser, updatedUser);
+              console.log("🔥 [Firebase Auth] Admin sync completed.", updatedUser);
             } else {
               setAuth(firebaseUser, currentUser);
             }
           } else {
+            console.warn("🔥 [Firebase Auth] Could not map to LocalDB user state.");
             setAuth(null, null);
           }
         } else {
+          console.log("🔥 [Firebase Auth] No user is currently logged in (user is null).");
           setAuth(null, null);
         }
       } catch (err) {
-        console.error("Notice: Local DB/Firebase auth state sync error:", err);
+        console.error("🔥 [Firebase Auth] Error during auth state sync:", err);
         setAuth(null, null);
       } finally {
         setInitialized(true);
