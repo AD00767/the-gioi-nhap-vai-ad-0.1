@@ -193,15 +193,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         },
         body: JSON.stringify({ email, pin, newPassword }),
       });
-      const data = await response.json();
+      const responseText = await response.text();
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseErr) {
+        return { 
+          success: false, 
+          error: `Máy chủ phản hồi không đúng định dạng JSON (Mã: ${response.status}). Chi tiết: ${responseText.slice(0, 100)}` 
+        };
+      }
       if (response.ok && data.success) {
         return { success: true };
       } else {
-        return { success: false, error: data.error || 'Yêu cầu thất bại.' };
+        return { success: false, error: data.error || `Yêu cầu thất bại (Mã: ${response.status}).` };
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("resetAdminPassword API error:", err);
-      return { success: false, error: 'Kết nối máy chủ thất bại.' };
+      return { success: false, error: `Kết nối máy chủ thất bại: ${err?.message || err}` };
     }
   },
 
