@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { User, getCurrentUser, setCurrentUserId, loginUser, registerUser, updateUser } from '../lib/localDb';
+import { auth, db } from '../lib/firebase';
+import { doc } from 'firebase/firestore';
+import { safeSetDoc } from '../lib/firestoreUtils';
 
 interface AuthState {
   user: User | null;
@@ -24,6 +27,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       setCurrentUserId(user.id);
       localStorage.setItem('cached_user_role', user.role);
       localStorage.setItem('cached_creator_status', String(user.creatorStatus));
+      // Background sync to Firestore
+      try {
+        safeSetDoc(doc(db, 'users', user.id), user);
+      } catch (err) {
+        console.warn("Background user sync failed:", err);
+      }
     } else {
       setCurrentUserId(null);
     }
@@ -33,6 +42,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user) => {
     if (user) {
       setCurrentUserId(user.id);
+      // Background sync to Firestore
+      try {
+        safeSetDoc(doc(db, 'users', user.id), user);
+      } catch (err) {
+        console.warn("Background user sync failed:", err);
+      }
     } else {
       setCurrentUserId(null);
     }
@@ -51,7 +66,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   register: (email, password, displayName) => {
-    const result = registerUser(email, password, displayName);
+    const firebaseUid = auth.currentUser?.uid;
+    const result = registerUser(email, password, displayName, 'USER', false, firebaseUid);
     if (result.user && !result.error) {
       get().setUser(result.user);
       return { success: true };

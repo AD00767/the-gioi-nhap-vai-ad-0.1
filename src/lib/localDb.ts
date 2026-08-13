@@ -273,7 +273,8 @@ export function registerUser(
   password?: string,
   displayName?: string,
   role: 'ADMIN' | 'USER' = 'USER',
-  creatorStatus: boolean = false
+  creatorStatus: boolean = false,
+  id?: string
 ): { user: User; error?: string } {
   const users = getStorage<User[]>(STORAGE_KEYS.USERS, []);
   const existing = users.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -283,16 +284,16 @@ export function registerUser(
   }
 
   const now = new Date().toISOString();
-  const id = 'user_' + Math.random().toString(36).substring(2, 9);
+  const finalId = id || 'user_' + Math.random().toString(36).substring(2, 9);
   const numericId = Math.floor(100000000 + Math.random() * 900000000).toString();
 
   const newUser: User = {
-    id,
+    id: finalId,
     numericId,
     email,
     password: password || '123456',
     displayName: displayName || email.split('@')[0],
-    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${id}`,
+    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${finalId}`,
     bio: '',
     socialLinks: {},
     role,
@@ -969,5 +970,138 @@ export function getAllModeratorInvites(): any[] {
 
 export function getAllLikes(): any[] {
   return getStorage<any[]>(STORAGE_KEYS.LIKES, []);
+}
+
+export function migrateUserId(oldId: string, newId: string): void {
+  // Update Users list
+  const users = getStorage<User[]>(STORAGE_KEYS.USERS, []);
+  const user = users.find(u => u.id === oldId);
+  if (user) {
+    user.id = newId;
+    setStorage(STORAGE_KEYS.USERS, users);
+  }
+
+  // Update current user ID in localStorage
+  const currentUserId = getCurrentUserId();
+  if (currentUserId === oldId) {
+    setCurrentUserId(newId);
+  }
+
+  // Update characters
+  const characters = getStorage<Character[]>(STORAGE_KEYS.CHARACTERS, []);
+  let charUpdated = false;
+  characters.forEach(c => {
+    if (c.creatorId === oldId) {
+      c.creatorId = newId;
+      charUpdated = true;
+    }
+  });
+  if (charUpdated) {
+    setStorage(STORAGE_KEYS.CHARACTERS, characters);
+  }
+
+  // Update prompts
+  const prompts = getStorage<Prompt[]>(STORAGE_KEYS.PROMPTS, []);
+  let promptUpdated = false;
+  prompts.forEach(p => {
+    if (p.authorId === oldId) {
+      p.authorId = newId;
+      promptUpdated = true;
+    }
+  });
+  if (promptUpdated) {
+    setStorage(STORAGE_KEYS.PROMPTS, prompts);
+  }
+
+  // Update feedbacks
+  const feedbacks = getStorage<Feedback[]>(STORAGE_KEYS.FEEDBACKS, []);
+  let feedbackUpdated = false;
+  feedbacks.forEach(f => {
+    if (f.senderId === oldId) {
+      f.senderId = newId;
+      feedbackUpdated = true;
+    }
+    if (f.recipientId === oldId) {
+      f.recipientId = newId;
+      feedbackUpdated = true;
+    }
+    if (f.replies) {
+      f.replies.forEach(r => {
+        if (r.senderId === oldId) {
+          r.senderId = newId;
+          feedbackUpdated = true;
+        }
+      });
+    }
+  });
+  if (feedbackUpdated) {
+    setStorage(STORAGE_KEYS.FEEDBACKS, feedbacks);
+  }
+
+  // Update comments
+  const comments = getStorage<Comment[]>(STORAGE_KEYS.COMMENTS, []);
+  let commentUpdated = false;
+  comments.forEach(c => {
+    if (c.authorId === oldId) {
+      c.authorId = newId;
+      commentUpdated = true;
+    }
+  });
+  if (commentUpdated) {
+    setStorage(STORAGE_KEYS.COMMENTS, comments);
+  }
+
+  // Update follows
+  const follows = getStorage<Follow[]>(STORAGE_KEYS.FOLLOWS, []);
+  let followUpdated = false;
+  follows.forEach(f => {
+    if (f.followerId === oldId) {
+      f.followerId = newId;
+      f.id = `${newId}_${f.creatorId}`;
+      followUpdated = true;
+    }
+    if (f.creatorId === oldId) {
+      f.creatorId = newId;
+      f.id = `${f.followerId}_${newId}`;
+      followUpdated = true;
+    }
+  });
+  if (followUpdated) {
+    setStorage(STORAGE_KEYS.FOLLOWS, follows);
+  }
+
+  // Update bookmarks
+  const bookmarks = getStorage<Bookmark[]>(STORAGE_KEYS.BOOKMARKS, []);
+  let bookmarkUpdated = false;
+  bookmarks.forEach(b => {
+    if (b.userId === oldId) {
+      b.userId = newId;
+      bookmarkUpdated = true;
+    }
+  });
+  if (bookmarkUpdated) {
+    setStorage(STORAGE_KEYS.BOOKMARKS, bookmarks);
+  }
+
+  // Update notifications
+  const notifications = getStorage<NotificationItem[]>(STORAGE_KEYS.NOTIFICATIONS, []);
+  let notificationUpdated = false;
+  notifications.forEach(n => {
+    if (n.userId === oldId) {
+      n.userId = newId;
+      notificationUpdated = true;
+    }
+    if (n.recipientId === oldId) {
+      n.recipientId = newId;
+      notificationUpdated = true;
+    }
+    if (n.actorId === oldId) {
+      n.actorId = newId;
+      notificationUpdated = true;
+    }
+  });
+  if (notificationUpdated) {
+    setStorage(STORAGE_KEYS.NOTIFICATIONS, notifications);
+  }
 }
 

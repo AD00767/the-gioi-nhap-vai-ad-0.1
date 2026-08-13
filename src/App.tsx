@@ -5,7 +5,7 @@
 
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth, db } from './lib/firebase';
 import { doc, collection, query, where, serverTimestamp } from 'firebase/firestore';
 import { safeGetDoc, safeGetDocs, safeUpdateDoc } from './lib/firestoreUtils';
@@ -49,34 +49,74 @@ export default function App() {
   useEffect(() => {
     initThemeAndFont();
 
-    try {
-      const { getCurrentUser, updateUser } = localDb;
-      const currentUser = getCurrentUser();
-      
-      if (currentUser) {
-        // Ensure user immediate settings are applied
-        if (currentUser.themePreference) {
-          applyTheme(currentUser.themePreference);
+    const initAuth = async () => {
+      try {
+        // Step 1: Ensure user is signed in to Firebase Auth anonymously so that direct Firestore operations succeed
+        let firebaseUser = auth.currentUser;
+        if (!firebaseUser) {
+          try {
+            const cred = await signInAnonymously(auth);
+            firebaseUser = cred.user;
+            console.log("Firebase anonymous authentication succeeded:", firebaseUser.uid);
+          } catch (fireErr) {
+            console.log("Firebase anonymous sign-in skipped (restricted operation). Fallback to local storage mode is active.");
+          }
         }
+
+        const { getCurrentUser, updateUser, registerUser } = localDb;
+        let currentUser = getCurrentUser();
         
-        // Auto-upgrade nhuchy259@gmail.com to ADMIN
-        const isOwner = currentUser.email?.toLowerCase() === 'nhuochy259@gmail.com';
-        if (isOwner && (currentUser.role !== 'ADMIN' || !currentUser.creatorStatus)) {
-          updateUser(currentUser.id, { role: 'ADMIN', creatorStatus: true });
-          const updatedUser = getCurrentUser();
-          setAuth({ uid: updatedUser.id, email: updatedUser.email, displayName: updatedUser.displayName, photoURL: updatedUser.avatar }, updatedUser);
-        } else {
-          setAuth({ uid: currentUser.id, email: currentUser.email, displayName: currentUser.displayName, photoURL: currentUser.avatar }, currentUser);
+        if (currentUser) {
+          // If the local user ID is different from the Firebase UID, migrate the local user's data to use the Firebase UID
+          // This keeps local ID in sync with Firebase UID, satisfying security rules!
+          if (firebaseUser && currentUser.id !== firebaseUser.uid) {
+            console.log(`Migrating local user ID from ${currentUser.id} to Firebase UID ${firebaseUser.uid}`);
+            localDb.migrateUserId(currentUser.id, firebaseUser.uid);
+            currentUser = getCurrentUser();
+          }
+        } else if (firebaseUser) {
+          // Auto-register a default local user using the Firebase UID to make onboarding frictionless
+          const isOwner = firebaseUser.email?.toLowerCase() === 'nhuochy259@gmail.com';
+          const defaultEmail = isOwner ? 'nhuochy259@gmail.com' : `user_${firebaseUser.uid.substring(0, 5)}@tgnhapvai.com`;
+          const regRes = registerUser(
+            defaultEmail,
+            '123456',
+            `User_${firebaseUser.uid.substring(0, 5)}`,
+            isOwner ? 'ADMIN' : 'USER',
+            isOwner ? true : false,
+            firebaseUser.uid
+          );
+          currentUser = regRes.user;
+          console.log("Auto-registered frictionless local user:", currentUser);
         }
-      } else {
+
+        if (currentUser) {
+          // Ensure user immediate settings are applied
+          if (currentUser.themePreference) {
+            applyTheme(currentUser.themePreference);
+          }
+          
+          // Auto-upgrade nhuochy259@gmail.com to ADMIN
+          const isOwner = currentUser.email?.toLowerCase() === 'nhuochy259@gmail.com';
+          if (isOwner && (currentUser.role !== 'ADMIN' || !currentUser.creatorStatus)) {
+            updateUser(currentUser.id, { role: 'ADMIN', creatorStatus: true });
+            const updatedUser = getCurrentUser();
+            setAuth({ uid: updatedUser.id, email: updatedUser.email, displayName: updatedUser.displayName, photoURL: updatedUser.avatar }, updatedUser);
+          } else {
+            setAuth({ uid: currentUser.id, email: currentUser.email, displayName: currentUser.displayName, photoURL: currentUser.avatar }, currentUser);
+          }
+        } else {
+          setAuth(null, null);
+        }
+      } catch (e) {
+        console.log("Notice: Local DB/Firebase auth initialization failed:", e);
         setAuth(null, null);
+      } finally {
+        setInitialized(true);
       }
-    } catch (e) {
-      console.log("Notice: Local DB auth initialization failed:", e);
-      setAuth(null, null);
-    } finally {
-      setInitialized(true);
-    }
+    };
+
+    initAuth();
   }, [setAuth, setInitialized]);
 
   return (
