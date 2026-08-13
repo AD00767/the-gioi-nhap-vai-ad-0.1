@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, PenTool, Image as ImageIcon, Link as LinkIcon, Trash2, Plus, FileText, HelpCircle } from 'lucide-react';
-import { collection, addDoc, doc, updateDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { collection, doc, serverTimestamp, query, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { safeAddDoc, safeUpdateDoc, safeGetDocs } from '../../lib/firestoreUtils';
 import { useAuthStore } from '../../store/useAuthStore';
 import { PromptItem } from '../../types';
 import toast from 'react-hot-toast';
@@ -136,7 +137,7 @@ export default function CreatePromptModal({ isOpen, onClose, onSuccess, promptTo
     try {
       if (promptToEdit) {
         const promptRef = doc(db, 'prompts', promptToEdit.id);
-        await updateDoc(promptRef, {
+        await safeUpdateDoc(promptRef, {
           name: name.trim(),
           purpose: purpose.trim(),
           content: content.trim(),
@@ -151,7 +152,7 @@ export default function CreatePromptModal({ isOpen, onClose, onSuccess, promptTo
         const { generateUniqueId } = await import('../../lib/generateId');
         const numericId = await generateUniqueId(db, 'prompt', '');
         
-        await addDoc(collection(db, 'prompts'), {
+        await safeAddDoc(collection(db, 'prompts'), {
           numericId,
           authorId: user.id,
           authorName: user.displayName,
@@ -175,11 +176,11 @@ export default function CreatePromptModal({ isOpen, onClose, onSuccess, promptTo
         // Notify followers of new prompt
         try {
           const followersQuery = query(collection(db, 'follows'), where('targetCreatorId', '==', user.id));
-          const followersSnap = await getDocs(followersQuery);
+          const followersSnap = await safeGetDocs(followersQuery);
           for (const fDoc of followersSnap.docs) {
             const fData = fDoc.data();
             if (fData.followerId && fData.followerId !== user.id) {
-              await addDoc(collection(db, 'notifications'), {
+              await safeAddDoc(collection(db, 'notifications'), {
                 userId: fData.followerId,
                 type: 'NEW_CONTENT',
                 title: 'Prompt mới từ Creator bạn follow',

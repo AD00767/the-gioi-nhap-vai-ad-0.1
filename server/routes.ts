@@ -281,7 +281,7 @@ router.post("/ai-search", async (req, res) => {
     let criteria: any = {};
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json"

@@ -102,16 +102,80 @@ export function makeDocSnapshot(id: string, item: any | null) {
   };
 }
 
+// Memory cache to prevent redundant reads and save quota
+const memoryCache: Record<string, { data: any, timestamp: number }> = {};
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Global state to track quota status
+export let isQuotaExceeded = false;
+export const onQuotaExceeded = (callback: (status: boolean) => void) => {
+  quotaCallbacks.push(callback);
+};
+const quotaCallbacks: ((status: boolean) => void)[] = [];
+
+function setQuotaExceeded(status: boolean) {
+  if (isQuotaExceeded === status) return;
+  isQuotaExceeded = status;
+  quotaCallbacks.forEach(cb => cb(status));
+}
+
 export async function safeGetDocs(queryOrRef: any): Promise<any> {
+  const colName = getCollectionName(queryOrRef);
+  const queryStr = queryOrRef?._query ? JSON.stringify(queryOrRef._query) : (queryOrRef?.id || 'default');
+  const cacheKey = `docs:${colName}:${queryStr}`;
+
+  // Check cache first
+  if (memoryCache[cacheKey] && (Date.now() - memoryCache[cacheKey].timestamp) < CACHE_DURATION) {
+    console.log(`[Firestore Cache] Using cached docs for ${colName}`);
+    return memoryCache[cacheKey].data;
+  }
+
   try {
     const snap = await getDocs(queryOrRef);
+    
+    // Update cache
+    memoryCache[cacheKey] = {
+      data: snap,
+      timestamp: Date.now()
+    };
+
+    // Sync to localDb for future fallbacks
+    try {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return { id: d.id, ...(data || {}) };
+      });
+      if (colName === 'users') {
+        items.forEach(item => localDb.updateUser(item.id, item));
+      } else if (colName === 'characters') {
+        items.forEach(item => localDb.updateCharacter(item.id, item));
+      } else if (colName === 'prompts') {
+        items.forEach(item => localDb.updatePrompt(item.id, item));
+      } else if (colName === 'feedbacks') {
+        items.forEach(item => localDb.updateFeedback(item.id, item));
+      } else if (colName === 'creator_requests') {
+        items.forEach(item => localDb.updateCreatorRequest(item.id, item));
+      }
+    } catch (syncErr) {
+      console.log("Background sync to localDb failed:", syncErr);
+    }
+
     return snap;
   } catch (err: any) {
-    console.log("[Firestore Safe Wrapper] getDocs failed, fallback to localDb:", err?.message || err);
+    const errorMsg = err?.message || String(err);
+    const isQuotaError = errorMsg.includes('Quota') || errorMsg.includes('limit exceeded') || errorMsg.includes('resource-exhausted') || errorMsg.includes('unavailable');
+    
+    if (isQuotaError) {
+      console.warn("[Firestore Safe Wrapper] Connection unavailable or Quota limit exceeded! Falling back to local data.");
+      setQuotaExceeded(true);
+    } else {
+      console.log("[Firestore Safe Wrapper] getDocs failed, fallback to localDb:", errorMsg);
+    }
+
     try {
-      const colName = getCollectionName(queryOrRef);
       const items = findLocalCollection(colName);
-      return makeQuerySnapshot(items);
+      const fallbackSnap = makeQuerySnapshot(items);
+      return fallbackSnap;
     } catch (innerErr) {
       console.error("[Firestore Safe Wrapper] getDocs fallback error:", innerErr);
       return makeQuerySnapshot([]);
@@ -120,20 +184,56 @@ export async function safeGetDocs(queryOrRef: any): Promise<any> {
 }
 
 export async function safeGetDoc(docRef: any): Promise<any> {
+  const colName = getCollectionName(docRef);
+  const docId = docRef.id || getDocId(docRef);
+  const cacheKey = `doc:${colName}:${docId}`;
+
+  // Check cache
+  if (memoryCache[cacheKey] && (Date.now() - memoryCache[cacheKey].timestamp) < CACHE_DURATION) {
+    console.log(`[Firestore Cache] Using cached doc for ${colName}/${docId}`);
+    return memoryCache[cacheKey].data;
+  }
+
   try {
     const snap = await getDoc(docRef);
-    if (snap.exists()) return snap;
-    const colName = getCollectionName(docRef);
-    const docId = getDocId(docRef);
+    
+    // Update cache
+    memoryCache[cacheKey] = {
+      data: snap,
+      timestamp: Date.now()
+    };
+
+    if (snap.exists()) {
+      // Sync to local
+      try {
+        const data = snap.data() as any;
+        const item = { id: snap.id, ...(data || {}) };
+        if (colName === 'users') localDb.updateUser(snap.id, item);
+        else if (colName === 'characters') localDb.updateCharacter(snap.id, item);
+        else if (colName === 'prompts') localDb.updatePrompt(snap.id, item);
+        else if (colName === 'feedbacks') localDb.updateFeedback(snap.id, item);
+      } catch (syncErr) {
+        console.log("Background sync to localDb failed:", syncErr);
+      }
+      return snap;
+    }
+
     const items = findLocalCollection(colName);
     const item = items.find(i => (i.id || i.uid) === docId);
     if (item) return makeDocSnapshot(docId, item);
     return snap;
   } catch (err: any) {
-    console.log("[Firestore Safe Wrapper] getDoc failed, fallback to localDb:", err?.message || err);
+    const errorMsg = err?.message || String(err);
+    const isQuotaError = errorMsg.includes('Quota') || errorMsg.includes('limit exceeded') || errorMsg.includes('resource-exhausted') || errorMsg.includes('unavailable');
+    
+    if (isQuotaError) {
+      console.warn(`[Firestore Safe Wrapper] getDoc Connection unavailable or Quota hit for ${colName}/${docId}`);
+      setQuotaExceeded(true);
+    } else {
+      console.log("[Firestore Safe Wrapper] getDoc failed, fallback to localDb:", errorMsg);
+    }
+
     try {
-      const colName = getCollectionName(docRef);
-      const docId = getDocId(docRef);
       const items = findLocalCollection(colName);
       const item = items.find(i => (i.id || i.uid) === docId);
       return makeDocSnapshot(docId, item);

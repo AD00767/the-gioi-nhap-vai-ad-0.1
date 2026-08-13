@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
-import { Navigate, Link, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   ShieldCheck, Users, Sparkles, UserCheck, AlertTriangle, 
   Clock, FileText, BarChart3, Settings, BadgeCheck, MessageSquare,
   Menu, X
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
+import { isUserAdminEmail, isAdminPinVerified } from '../../lib/adminAuth';
+import AdminPinModal from '../../components/auth/AdminPinModal';
+import toast from 'react-hot-toast';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -14,13 +17,62 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { user } = useAuthStore();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isPinUnlocked, setIsPinUnlocked] = useState(() => isAdminPinVerified());
+  const [showPinModal, setShowPinModal] = useState(() => !isAdminPinVerified());
 
-  if (!user || (user.role !== 'ADMIN' && user.role !== 'MODERATOR' && user.role !== 'MOD')) {
-    return <Navigate to="/welcome" replace />;
+  const isModerator = user?.role === 'MODERATOR' || user?.role === 'MOD';
+  const isEmailAdmin = isUserAdminEmail(user?.email);
+
+  useEffect(() => {
+    setIsPinUnlocked(isAdminPinVerified());
+    if (isEmailAdmin && !isAdminPinVerified()) {
+      setShowPinModal(true);
+    }
+  }, [user?.email, isEmailAdmin]);
+
+  // Not logged in or neither Admin email match nor Moderator
+  if (!user || (!isEmailAdmin && !isModerator && user.role !== 'ADMIN')) {
+    toast.error("Tài khoản của bạn không có quyền Admin.");
+    return <Navigate to="/home" replace />;
   }
 
-  const isAdmin = user.role === 'ADMIN';
+  // If email matches Admin email, enforce Layer 2 (PIN modal)
+  if (isEmailAdmin && !isPinUnlocked) {
+    return (
+      <div className="min-h-screen bg-neutral-900 text-white flex items-center justify-center p-4">
+        <AdminPinModal 
+          isOpen={showPinModal} 
+          userEmail={user.email}
+          onSuccess={() => {
+            setIsPinUnlocked(true);
+            setShowPinModal(false);
+          }}
+          onCancel={() => {
+            setShowPinModal(false);
+            navigate('/home');
+          }}
+        />
+        <div className="text-center p-8 max-w-md bg-neutral-800 rounded-3xl border border-neutral-700">
+          <ShieldCheck className="w-12 h-12 text-red-500 mx-auto mb-4 animate-bounce" />
+          <h2 className="text-lg font-bold mb-2 uppercase">Yêu cầu xác thực Mã PIN Admin</h2>
+          <p className="text-xs text-neutral-400 mb-6">
+            Lớp 1 (Email) đã hoàn tất. Bạn cần nhập Mã PIN Bí mật (Lớp 2) để truy cập Bảng điều khiển Quản trị.
+          </p>
+          <button
+            onClick={() => setShowPinModal(true)}
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-2xl shadow-lg transition-all"
+          >
+            Nhập Mã PIN Bí Mật
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const isAdmin = isEmailAdmin && isPinUnlocked;
+
 
   const menuItems = isAdmin ? [
     { path: '/admin/dashboard', label: 'Thống Kê', icon: <BarChart3 className="w-5 h-5" /> },

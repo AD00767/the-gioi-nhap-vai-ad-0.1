@@ -4,8 +4,9 @@ import {
   X, Upload, Link as LinkIcon, Sparkles, Plus, Trash2, ArrowLeft, 
   CheckCircle2, AlertCircle, Image as ImageIcon, Tag as TagIcon, FileText, MessageSquare, Quote, Info
 } from 'lucide-react';
-import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
+import { doc, collection, serverTimestamp, query, where, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { safeGetDoc, safeAddDoc, safeUpdateDoc, safeGetDocs } from '../lib/firestoreUtils';
 import { useAuthStore } from '../store/useAuthStore';
 import toast from 'react-hot-toast';
 
@@ -44,7 +45,7 @@ export default function CreateCharacter() {
       const fetchCharacter = async () => {
         try {
           const docRef = doc(db, 'characters', id);
-          const docSnap = await getDoc(docRef);
+          const docSnap = await safeGetDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
             // Permission check: owner or admin
@@ -210,7 +211,7 @@ export default function CreateCharacter() {
     try {
       if (id) {
         const charRef = doc(db, 'characters', id);
-        await updateDoc(charRef, {
+        await safeUpdateDoc(charRef, {
           name: name.trim(),
           avatar,
           gender,
@@ -228,7 +229,7 @@ export default function CreateCharacter() {
         const { generateUniqueId } = await import('../lib/generateId');
         const numericId = await generateUniqueId(db, 'character', '');
 
-        await addDoc(collection(db, 'characters'), {
+        await safeAddDoc(collection(db, 'characters'), {
           numericId,
           name: name.trim(),
           avatar,
@@ -256,8 +257,7 @@ export default function CreateCharacter() {
         // Ensure user creatorStatus is activated in Firestore & Local State
         try {
           const userRef = doc(db, 'users', user.id);
-          await updateDoc(userRef, { creatorStatus: true, updatedAt: serverTimestamp() }).catch(async () => {
-            const { setDoc } = await import('firebase/firestore');
+          await safeUpdateDoc(userRef, { creatorStatus: true, updatedAt: serverTimestamp() }).catch(async () => {
             await setDoc(userRef, { creatorStatus: true }, { merge: true });
           });
           setAuth(firebaseUser, { ...user, creatorStatus: true });
@@ -269,10 +269,10 @@ export default function CreateCharacter() {
         // Send notifications to followers
         try {
           const q = query(collection(db, 'follows'), where('followingId', '==', user.id));
-          const followDocs = await getDocs(q);
+          const followDocs = await safeGetDocs(q);
           for (const fdoc of followDocs.docs) {
             const followerId = fdoc.data().followerId;
-            await addDoc(collection(db, 'notifications'), {
+            await safeAddDoc(collection(db, 'notifications'), {
               userId: followerId,
               type: 'NEW_CHARACTER',
               title: 'Character Mới',

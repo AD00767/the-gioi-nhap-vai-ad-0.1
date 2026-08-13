@@ -12,7 +12,9 @@ service cloud.firestore {
     }
     
     function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) ?
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data :
+        { 'role': 'USER', 'isLocked': false };
     }
     
     function hasRole(role) {
@@ -171,12 +173,14 @@ service cloud.firestore {
 
     match /feedbacks/{feedbackId}/private_replies/{replyId} {
       allow read: if isSignedIn() && (
-        get(/databases/$(database)/documents/feedbacks/$(feedbackId)).data.senderId == request.auth.uid ||
-        get(/databases/$(database)/documents/feedbacks/$(feedbackId)).data.recipientId == request.auth.uid ||
+        (exists(/databases/$(database)/documents/feedbacks/$(feedbackId)) && (
+          get(/databases/$(database)/documents/feedbacks/$(feedbackId)).data.senderId == request.auth.uid ||
+          get(/databases/$(database)/documents/feedbacks/$(feedbackId)).data.recipientId == request.auth.uid
+        )) ||
         isModerator()
       );
-      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
-      allow update, delete: if (isSignedIn() && request.resource.data.senderId == request.auth.uid) || isModerator();
+      allow create: if isSignedIn();
+      allow update, delete: if (isSignedIn() && resource.data.senderId == request.auth.uid) || isModerator();
     }
 
     // Appeals

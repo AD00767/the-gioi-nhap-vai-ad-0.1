@@ -13,6 +13,7 @@ import PromptCard from '../components/PromptCard';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import toast from 'react-hot-toast';
 import { Link, useNavigate } from 'react-router-dom';
+import { safeGetDocs, safeUpdateDoc, safeDeleteDoc, safeAddDoc } from '../lib/firestoreUtils';
 
 interface FeedbackItem {
   id: string;
@@ -85,7 +86,7 @@ export default function CreatorDashboard() {
       setQuotaError(null);
       // 1. Fetch Creator's Characters
       const charQ = query(collection(db, 'characters'), where('creatorId', '==', user.id));
-      const charSnap = await getDocs(charQ);
+      const charSnap = await safeGetDocs(charQ);
       const charList: CharacterItem[] = [];
       let viewsSum = 0;
       let likesSum = 0;
@@ -105,7 +106,7 @@ export default function CreatorDashboard() {
 
       // 2. Fetch Creator's Prompts
       const promptQ = query(collection(db, 'prompts'), where('authorId', '==', user.id));
-      const promptSnap = await getDocs(promptQ);
+      const promptSnap = await safeGetDocs(promptQ);
       const promptList: PromptItem[] = [];
 
       promptSnap.docs.forEach(d => {
@@ -125,7 +126,7 @@ export default function CreatorDashboard() {
 
       // 3. Fetch Feedbacks received
       const fbQ = query(collection(db, 'feedbacks'), where('recipientId', '==', user.id));
-      const fbSnap = await getDocs(fbQ);
+      const fbSnap = await safeGetDocs(fbQ);
       const fbList: FeedbackItem[] = [];
       fbSnap.docs.forEach(d => {
         const data = d.data();
@@ -138,7 +139,7 @@ export default function CreatorDashboard() {
 
       // 4. Fetch Followers
       const followQ = query(collection(db, 'follows'), where('targetCreatorId', '==', user.id));
-      const followSnap = await getDocs(followQ);
+      const followSnap = await safeGetDocs(followQ);
       const followerList: FollowerItem[] = [];
 
       for (const fDoc of followSnap.docs) {

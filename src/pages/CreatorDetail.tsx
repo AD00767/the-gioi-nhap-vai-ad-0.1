@@ -4,7 +4,7 @@ import {
   Sparkles, UserCheck, UserPlus, Users, BookOpen, PenTool, ArrowLeft, Flag, AlertCircle, RefreshCw,
   Facebook, Instagram, Music, MessageSquare, ExternalLink
 } from 'lucide-react';
-import { doc, collection, query, where, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, where, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { safeGetDoc, safeGetDocs } from '../lib/firestoreUtils';
 import { db } from '../lib/firebase';
 import { useAuthStore } from '../store/useAuthStore';
@@ -505,7 +505,6 @@ export default function CreatorDetail() {
                onDelete={async (promptId) => {
                   if (!confirm("Bạn có chắc chắn muốn xóa hoàn toàn Prompt này không? Hành động này không thể hoàn tác và Prompt sẽ biến mất ngay lập tức khỏi hệ thống.")) return;
                   try {
-                    const { doc, deleteDoc } = await import('firebase/firestore');
                     await deleteDoc(doc(db, 'prompts', promptId));
                     toast.success("Đã xóa hoàn toàn Prompt khỏi hệ thống.");
                     fetchCreatorData();

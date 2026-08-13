@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, CheckCircle2, XCircle, Clock, UserCheck, AlertCircle } from 'lucide-react';
-import { collection, getDocs, doc, updateDoc, addDoc, query, where } from 'firebase/firestore';
+import { collection, doc, addDoc, query, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { safeGetDocs, safeUpdateDoc, safeAddDoc } from '../../lib/firestoreUtils';
 import toast from 'react-hot-toast';
 
 interface CreatorRequest {
@@ -24,14 +25,18 @@ export default function AdminApprovalSection() {
     setLoading(true);
     try {
       const q = query(collection(db, 'creator_requests'), where('status', '==', 'PENDING'));
-      const snap = await getDocs(q);
+      const snap = await safeGetDocs(q);
       const list: CreatorRequest[] = [];
-      snap.docs.forEach(d => {
+      snap.forEach((d: any) => {
         list.push({ id: d.id, ...d.data() } as CreatorRequest);
       });
       setRequests(list);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to fetch creator requests:", err);
+      // specific toast if it's likely a quota issue
+      if (err?.message?.includes('Quota')) {
+        toast.error("Hệ thống đang quá tải (hết lượt đọc dữ liệu miễn phí). Vui lòng quay lại sau.");
+      }
     } finally {
       setLoading(false);
     }
@@ -45,19 +50,19 @@ export default function AdminApprovalSection() {
     setProcessingId(req.id);
     try {
       // 1. Update creator_requests doc
-      await updateDoc(doc(db, 'creator_requests', req.id), {
+      await safeUpdateDoc(doc(db, 'creator_requests', req.id), {
         status: 'APPROVED',
         updatedAt: new Date().toISOString()
       });
 
       // 2. Update user doc -> creatorStatus = true
-      await updateDoc(doc(db, 'users', req.userId), {
+      await safeUpdateDoc(doc(db, 'users', req.userId), {
         creatorStatus: true,
         creatorRequestStatus: 'APPROVED'
       });
 
       // 3. Send notification to user
-      await addDoc(collection(db, 'notifications'), {
+      await safeAddDoc(collection(db, 'notifications'), {
         userId: req.userId,
         title: 'Yêu cầu Creator được phê duyệt',
         content: 'Chúc mừng! Quản trị viên đã phê duyệt yêu cầu trở thành Creator của bạn. Bạn đã có quyền đăng Character lên hệ thống!',
@@ -79,18 +84,18 @@ export default function AdminApprovalSection() {
     setProcessingId(req.id);
     try {
       // 1. Update creator_requests doc
-      await updateDoc(doc(db, 'creator_requests', req.id), {
+      await safeUpdateDoc(doc(db, 'creator_requests', req.id), {
         status: 'REJECTED',
         updatedAt: new Date().toISOString()
       });
 
       // 2. Update user doc -> creatorRequestStatus = REJECTED
-      await updateDoc(doc(db, 'users', req.userId), {
+      await safeUpdateDoc(doc(db, 'users', req.userId), {
         creatorRequestStatus: 'REJECTED'
       });
 
       // 3. Send notification to user
-      await addDoc(collection(db, 'notifications'), {
+      await safeAddDoc(collection(db, 'notifications'), {
         userId: req.userId,
         title: 'Yêu cầu Creator bị từ chối',
         content: 'Yêu cầu trở thành Creator của bạn đã bị từ chối bởi Quản trị viên.',

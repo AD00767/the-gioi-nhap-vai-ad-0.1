@@ -3,8 +3,9 @@ import {
   X, Lock, Globe, UserCheck, Send, AlertCircle, Search, 
   Upload, Trash2, Image as ImageIcon, Check, Info, HelpCircle
 } from 'lucide-react';
-import { collection, getDocs, addDoc, serverTimestamp, query, limit } from 'firebase/firestore';
+import { collection, serverTimestamp, query, limit } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { safeGetDocs, safeAddDoc } from '../../lib/firestoreUtils';
 import { useAuthStore } from '../../store/useAuthStore';
 import toast from 'react-hot-toast';
 
@@ -52,7 +53,7 @@ export default function CreateFeedbackModal({
     const fetchUsers = async () => {
       setLoadingUsers(true);
       try {
-        const snap = await getDocs(query(collection(db, 'users'), limit(200)));
+        const snap = await safeGetDocs(query(collection(db, 'users'), limit(200)));
         const list: UserOption[] = [];
         snap.docs.forEach(docSnap => {
           const uData = docSnap.data();
@@ -197,10 +198,10 @@ export default function CreateFeedbackModal({
         deletedAt: null
       };
 
-      const fbRef = await addDoc(collection(db, 'feedbacks'), feedbackData);
+      const fbRef = await safeAddDoc(collection(db, 'feedbacks'), feedbackData);
 
       // 2. Create notification for recipient
-      await addDoc(collection(db, 'notifications'), {
+      await safeAddDoc(collection(db, 'notifications'), {
         userId: selectedRecipient.id,
         recipientId: selectedRecipient.id,
         senderId: user.id,

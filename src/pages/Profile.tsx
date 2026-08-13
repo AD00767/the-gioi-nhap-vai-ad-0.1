@@ -3,8 +3,9 @@ import {
   User as UserIcon, Settings, Plus, Pin, Heart, Bookmark, Users, UserCheck, 
   Sparkles, PenTool, ExternalLink, Edit3, Trash2, Copy, Check, Facebook, Instagram, Music, MessageSquare, ShieldAlert, ShieldCheck, X, Eye
 } from 'lucide-react';
-import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, getDoc, addDoc, increment, limit } from 'firebase/firestore';
+import { collection, query, where, doc, increment, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { safeGetDocs, safeGetDoc, safeUpdateDoc, safeDeleteDoc, safeAddDoc } from '../lib/firestoreUtils';
 import { useAuthStore } from '../store/useAuthStore';
 import { CharacterItem, PromptItem } from '../types';
 import EditProfileModal from '../components/profile/EditProfileModal';
@@ -90,7 +91,7 @@ export default function Profile() {
     }
     setSubmittingRequest(true);
     try {
-      await addDoc(collection(db, 'creator_requests'), {
+      await safeAddDoc(collection(db, 'creator_requests'), {
         userId: user.id,
         userDisplayName: reqName.trim(),
         userAvatar: user.avatar || '',
@@ -100,7 +101,7 @@ export default function Profile() {
         createdAt: new Date().toISOString()
       });
 
-      await updateDoc(doc(db, 'users', user.id), {
+      await safeUpdateDoc(doc(db, 'users', user.id), {
         creatorRequestStatus: 'PENDING'
       });
 
@@ -124,17 +125,17 @@ export default function Profile() {
     try {
       // Check pending creator request
       const reqQuery = query(collection(db, 'creator_requests'), where('userId', '==', user.id), where('status', '==', 'PENDING'));
-      const reqSnap = await getDocs(reqQuery);
+      const reqSnap = await safeGetDocs(reqQuery);
       setHasPendingRequest(!reqSnap.empty);
 
       // 1. Fetch my Created Characters
       const charQuery = query(collection(db, 'characters'), where('creatorId', '==', user.id));
-      const charSnap = await getDocs(charQuery);
+      const charSnap = await safeGetDocs(charQuery);
       const fetchedChars: CharacterItem[] = [];
       let totalLikesOnMyCharsSum = 0;
       let totalCharSavesOnMyCharsSum = 0;
 
-      charSnap.docs.forEach(d => {
+      charSnap.forEach((d: any) => {
         const data = d.data();
         if (!data.deletedAt) {
           const charItem = { id: d.id, ...data } as CharacterItem;
@@ -147,11 +148,11 @@ export default function Profile() {
 
       // 2. Fetch my Created Prompts
       const promptQuery = query(collection(db, 'prompts'), where('authorId', '==', user.id));
-      const promptSnap = await getDocs(promptQuery);
+      const promptSnap = await safeGetDocs(promptQuery);
       const fetchedPrompts: PromptItem[] = [];
       let totalPromptSavesOnMyPromptsSum = 0;
 
-      promptSnap.docs.forEach(d => {
+      promptSnap.forEach((d: any) => {
         const data = d.data();
         if (!data.deletedAt) {
           const pItem = { id: d.id, ...data } as PromptItem;
@@ -163,8 +164,8 @@ export default function Profile() {
 
       // 3. Fetch Liked Characters by THIS USER (checking both character_likes and legacy likes)
       const [charLikesSnap, legacyLikesSnap] = await Promise.all([
-        getDocs(query(collection(db, 'character_likes'), where('userId', '==', user.id), limit(100))),
-        getDocs(query(collection(db, 'likes'), where('userId', '==', user.id), limit(100)))
+        safeGetDocs(query(collection(db, 'character_likes'), where('userId', '==', user.id), limit(100))),
+        safeGetDocs(query(collection(db, 'likes'), where('userId', '==', user.id), limit(100)))
       ]);
 
       const likedCharIds = Array.from(new Set([
@@ -181,7 +182,7 @@ export default function Profile() {
         }
 
         const charDocsResults = await Promise.all(
-          chunks.map(chunk => getDocs(query(collection(db, 'characters'), where('__name__', 'in', chunk))))
+          chunks.map(chunk => safeGetDocs(query(collection(db, 'characters'), where('__name__', 'in', chunk))))
         );
 
         charDocsResults.forEach(snap => {
@@ -196,7 +197,7 @@ export default function Profile() {
       setLikedCharacters(likedCharsFetched);
 
       // 4. Fetch Bookmarks (Saved Characters & Saved Prompts by THIS USER)
-      const bmSnap = await getDocs(query(collection(db, 'bookmarks'), where('userId', '==', user.id), limit(100)));
+      const bmSnap = await safeGetDocs(query(collection(db, 'bookmarks'), where('userId', '==', user.id), limit(100)));
       
       const savedCharIds: string[] = [];
       const savedPromptIds: string[] = [];
@@ -219,7 +220,7 @@ export default function Profile() {
           if (uniqueSavedCharIds.length > 0) {
             const chunks = [];
             for (let i = 0; i < uniqueSavedCharIds.length; i += 30) chunks.push(uniqueSavedCharIds.slice(i, i + 30));
-            const snaps = await Promise.all(chunks.map(c => getDocs(query(collection(db, 'characters'), where('__name__', 'in', c)))));
+            const snaps = await Promise.all(chunks.map(c => safeGetDocs(query(collection(db, 'characters'), where('__name__', 'in', c)))));
             snaps.forEach(s => s.docs.forEach(d => { if (!d.data().deletedAt) list.push({ id: d.id, ...d.data() } as CharacterItem); }));
           }
           return list;
@@ -229,7 +230,7 @@ export default function Profile() {
           if (uniqueSavedPromptIds.length > 0) {
             const chunks = [];
             for (let i = 0; i < uniqueSavedPromptIds.length; i += 30) chunks.push(uniqueSavedPromptIds.slice(i, i + 30));
-            const snaps = await Promise.all(chunks.map(c => getDocs(query(collection(db, 'prompts'), where('__name__', 'in', c)))));
+            const snaps = await Promise.all(chunks.map(c => safeGetDocs(query(collection(db, 'prompts'), where('__name__', 'in', c)))));
             snaps.forEach(s => s.docs.forEach(d => { if (!d.data().deletedAt) list.push({ id: d.id, ...d.data() } as PromptItem); }));
           }
           return list;
@@ -256,7 +257,7 @@ export default function Profile() {
 
       // 5. Đang Theo Dõi (Following count)
       const followingQuery = query(collection(db, 'follows'), where('followerId', '==', user.id));
-      const followingSnap = await getDocs(followingQuery);
+      const followingSnap = await safeGetDocs(followingQuery);
       const followingCreatorIds = new Set<string>();
       followingSnap.docs.forEach(d => {
         const data = d.data();
@@ -269,7 +270,7 @@ export default function Profile() {
 
       // 6. Fetch User Appeals
       const appealsQuery = query(collection(db, 'appeals'), where('userId', '==', user.id));
-      const appealsSnap = await getDocs(appealsQuery);
+      const appealsSnap = await safeGetDocs(appealsQuery);
       setMyAppeals(appealsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
     } catch (err) {
@@ -303,7 +304,7 @@ export default function Profile() {
 
     try {
       const charRef = doc(db, 'characters', char.id);
-      await updateDoc(charRef, { pinned: !char.pinned });
+      await safeUpdateDoc(charRef, { pinned: !char.pinned });
       toast.success(char.pinned ? "Đã bỏ ghim Character." : "Đã ghim Character lên đầu trang!");
       loadUserData();
     } catch (err) {
@@ -315,7 +316,7 @@ export default function Profile() {
   const handleTogglePinPrompt = async (p: PromptItem) => {
     try {
       const pRef = doc(db, 'prompts', p.id);
-      await updateDoc(pRef, { pinned: !p.pinned });
+      await safeUpdateDoc(pRef, { pinned: !p.pinned });
       toast.success(p.pinned ? "Đã bỏ ghim Prompt." : "Đã ghim Prompt!");
       loadUserData();
     } catch (err) {
@@ -331,7 +332,7 @@ export default function Profile() {
   const executeDeleteCharacter = async (charId: string) => {
     try {
       const charRef = doc(db, 'characters', charId);
-      await updateDoc(charRef, { deletedAt: new Date().toISOString() });
+      await safeUpdateDoc(charRef, { deletedAt: new Date().toISOString() });
       toast.success("Đã xóa Character.");
       loadUserData();
     } catch (err) {
@@ -346,7 +347,7 @@ export default function Profile() {
 
   const executeDeletePrompt = async (promptId: string) => {
     try {
-      await deleteDoc(doc(db, 'prompts', promptId));
+      await safeDeleteDoc(doc(db, 'prompts', promptId));
       toast.success("Đã xóa hoàn toàn Prompt khỏi hệ thống.");
       loadUserData();
     } catch (err) {
@@ -369,9 +370,9 @@ export default function Profile() {
     setLoadingFollows(true);
     try {
       const q = query(collection(db, 'follows'), where('targetCreatorId', '==', user.id));
-      const snap = await getDocs(q);
+      const snap = await safeGetDocs(q);
       const q2 = query(collection(db, 'follows'), where('creatorId', '==', user.id));
-      const snap2 = await getDocs(q2);
+      const snap2 = await safeGetDocs(q2);
 
       const allDocs = [...snap.docs, ...snap2.docs];
       const seen = new Set<string>();
@@ -382,7 +383,7 @@ export default function Profile() {
         if (!followerId || followerId === user.id || seen.has(followerId)) continue;
         seen.add(followerId);
 
-        const uDoc = await getDoc(doc(db, 'users', followerId));
+        const uDoc = await safeGetDoc(doc(db, 'users', followerId));
         if (uDoc.exists()) {
           usersList.push({ id: uDoc.id, ...uDoc.data() });
         }
@@ -402,7 +403,7 @@ export default function Profile() {
     setLoadingFollows(true);
     try {
       const q = query(collection(db, 'follows'), where('followerId', '==', user.id));
-      const snap = await getDocs(q);
+      const snap = await safeGetDocs(q);
       const seen = new Set<string>();
       const usersList: any[] = [];
 
@@ -411,7 +412,7 @@ export default function Profile() {
         if (!creatorId || creatorId === user.id || seen.has(creatorId)) continue;
         seen.add(creatorId);
 
-        const uDoc = await getDoc(doc(db, 'users', creatorId));
+        const uDoc = await safeGetDoc(doc(db, 'users', creatorId));
         if (uDoc.exists()) {
           usersList.push({ id: uDoc.id, ...uDoc.data() });
         }
@@ -429,19 +430,19 @@ export default function Profile() {
     if (!user?.id) return;
     try {
       const q1 = query(collection(db, 'character_likes'), where('userId', '==', user.id), where('characterId', '==', charId));
-      const snap1 = await getDocs(q1);
+      const snap1 = await safeGetDocs(q1);
       for (const d of snap1.docs) {
-        await deleteDoc(doc(db, 'character_likes', d.id));
+        await safeDeleteDoc(doc(db, 'character_likes', d.id));
       }
 
       const q2 = query(collection(db, 'likes'), where('userId', '==', user.id), where('characterId', '==', charId));
-      const snap2 = await getDocs(q2);
+      const snap2 = await safeGetDocs(q2);
       for (const d of snap2.docs) {
-        await deleteDoc(doc(db, 'likes', d.id));
+        await safeDeleteDoc(doc(db, 'likes', d.id));
       }
 
       const charRef = doc(db, 'characters', charId);
-      await updateDoc(charRef, { likesCount: increment(-1) });
+      await safeUpdateDoc(charRef, { likesCount: increment(-1) });
 
       toast.success("Đã bỏ thích Character.");
       loadUserData();
@@ -456,7 +457,7 @@ export default function Profile() {
     if (!user?.id) return;
     try {
       const q = query(collection(db, 'bookmarks'), where('userId', '==', user.id), limit(100));
-      const snap = await getDocs(q);
+      const snap = await safeGetDocs(q);
 
       for (const d of snap.docs) {
         const data = d.data();
@@ -464,17 +465,17 @@ export default function Profile() {
         const tType = data.targetType || (data.characterId ? 'CHARACTER' : data.promptId ? 'PROMPT' : null);
 
         if (tId === targetId && tType === targetType) {
-          await deleteDoc(doc(db, 'bookmarks', d.id));
+          await safeDeleteDoc(doc(db, 'bookmarks', d.id));
         }
       }
 
       if (targetType === 'CHARACTER') {
         const charRef = doc(db, 'characters', targetId);
-        await updateDoc(charRef, { savesCount: increment(-1) });
+        await safeUpdateDoc(charRef, { savesCount: increment(-1) });
         toast.success("Đã bỏ lưu Character.");
       } else {
         const promptRef = doc(db, 'prompts', targetId);
-        await updateDoc(promptRef, { savesCount: increment(-1) });
+        await safeUpdateDoc(promptRef, { savesCount: increment(-1) });
         toast.success("Đã bỏ lưu Prompt.");
       }
 

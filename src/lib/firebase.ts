@@ -1,10 +1,17 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Using initializeFirestore with experimentalForceLongPolling to fix connection issues in restricted environments
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+  host: 'firestore.googleapis.com',
+  ssl: true,
+}, firebaseConfig.firestoreDatabaseId || '(default)');
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
