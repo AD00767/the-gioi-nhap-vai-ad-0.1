@@ -119,6 +119,38 @@ function setQuotaExceeded(status: boolean) {
   quotaCallbacks.forEach(cb => cb(status));
 }
 
+function matchesQueryString(item: any, queryStr: string): boolean {
+  if (!queryStr || queryStr === 'default') return true;
+  
+  // Fields we want to check for filtering
+  const fieldsToCheck = [
+    'recipientId',
+    'senderId',
+    'authorId',
+    'creatorId',
+    'characterId',
+    'promptId',
+    'userId',
+    'mode'
+  ];
+  
+  for (const field of fieldsToCheck) {
+    if (item[field] !== undefined && item[field] !== null) {
+      const valStr = String(item[field]);
+      
+      // If the field name is present in the query string (meaning there is likely a filter on it)
+      if (queryStr.includes(field)) {
+        // But the specific value of this item is NOT in the query string, then it is a mismatch!
+        if (!queryStr.includes(valStr)) {
+          return false;
+        }
+      }
+    }
+  }
+  
+  return true;
+}
+
 export async function safeGetDocs(queryOrRef: any): Promise<any> {
   const colName = getCollectionName(queryOrRef);
   const queryStr = queryOrRef?._query ? JSON.stringify(queryOrRef._query) : (queryOrRef?.id || 'default');
@@ -133,12 +165,6 @@ export async function safeGetDocs(queryOrRef: any): Promise<any> {
   try {
     const snap = await getDocs(queryOrRef);
     
-    // Update cache
-    memoryCache[cacheKey] = {
-      data: snap,
-      timestamp: Date.now()
-    };
-
     // Sync to localDb for future fallbacks
     try {
       const items = snap.docs.map(d => {
@@ -160,7 +186,41 @@ export async function safeGetDocs(queryOrRef: any): Promise<any> {
       console.log("Background sync to localDb failed:", syncErr);
     }
 
-    return snap;
+    const remoteItems = snap.docs.map(d => {
+      const data = d.data() as any;
+      return { id: d.id, ...(data || {}) };
+    });
+
+    const localItems = findLocalCollection(colName);
+    const mergedMap = new Map<string, any>();
+
+    // 1. Add remote items
+    remoteItems.forEach(item => {
+      if (item && item.id) {
+        mergedMap.set(item.id, item);
+      }
+    });
+
+    // 2. Add local items that match query filters
+    localItems.forEach(item => {
+      if (item && item.id) {
+        if (matchesQueryString(item, queryStr)) {
+          mergedMap.set(item.id, item);
+        }
+      }
+    });
+
+    // 3. Filter out deleted items
+    const mergedList = Array.from(mergedMap.values()).filter(item => !item.deletedAt);
+    const mergedSnap = makeQuerySnapshot(mergedList);
+
+    // Update cache with merged snapshot
+    memoryCache[cacheKey] = {
+      data: mergedSnap,
+      timestamp: Date.now()
+    };
+
+    return mergedSnap;
   } catch (err: any) {
     const errorMsg = err?.message || String(err);
     const isQuotaError = errorMsg.includes('Quota') || errorMsg.includes('limit exceeded') || errorMsg.includes('resource-exhausted') || errorMsg.includes('unavailable');

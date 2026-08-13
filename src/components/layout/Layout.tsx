@@ -151,56 +151,71 @@ export default function Layout() {
   if (!isInitialized) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
 
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("123456");
+  const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT'>('LOGIN');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleLoginClick = () => {
+    setAuthMode('LOGIN');
     setShowLoginModal(true);
   };
 
-  const handleLocalLoginSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginEmail.trim()) {
-      toast.error("Vui lòng nhập tên đăng nhập hoặc email.");
-      return;
-    }
+    const { login, register, forgotPassword } = useAuthStore.getState();
 
-    const emailOrUser = loginEmail.trim();
-    const cleanKey = emailOrUser.toLowerCase();
-    const isOwner = isUserAdminEmail(cleanKey);
-
-    const { login, register, refreshUser } = useAuthStore.getState();
-    const { getAllUsers, updateUser } = localDb;
-    const allUsers = getAllUsers();
-    
-    const existing = allUsers.find(
-      (u: any) => u.email.toLowerCase() === cleanKey || u.displayName.toLowerCase() === cleanKey
-    );
-
-    if (existing) {
-      if (isOwner && (existing.role !== 'ADMIN' || !existing.creatorStatus)) {
-        updateUser(existing.id, { role: 'ADMIN', creatorStatus: true });
-        refreshUser();
+    if (authMode === 'LOGIN') {
+      if (!email.trim() || !password) {
+        toast.error("Vui lòng điền đầy đủ Email và Mật khẩu.");
+        return;
       }
-      const res = login(emailOrUser, loginPassword);
+      setLoading(true);
+      const res = await login(email.trim(), password);
+      setLoading(false);
       if (res.success) {
         toast.success("Đăng nhập thành công!");
         setShowLoginModal(false);
       } else {
-        toast.error(res.error || "Mật khẩu không chính xác.");
+        toast.error(res.error || "Đăng nhập thất bại.");
       }
-    } else {
-      const regRes = register(emailOrUser, loginPassword, emailOrUser.split('@')[0]);
-      if (regRes.success) {
-        const currentUser = useAuthStore.getState().user;
-        if (currentUser && isOwner) {
-          updateUser(currentUser.id, { role: 'ADMIN', creatorStatus: true });
-          refreshUser();
-        }
-        toast.success("Đăng ký & Đăng nhập tài khoản mới thành công!");
+    } else if (authMode === 'REGISTER') {
+      if (!email.trim() || !password || !confirmPassword) {
+        toast.error("Vui lòng điền đầy đủ các thông tin bắt buộc.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        toast.error("Mật khẩu nhập lại không khớp.");
+        return;
+      }
+      if (password.length < 6) {
+        toast.error("Mật khẩu phải dài tối thiểu 6 ký tự.");
+        return;
+      }
+      setLoading(true);
+      const res = await register(email.trim(), password, displayName.trim() || undefined);
+      setLoading(false);
+      if (res.success) {
+        toast.success("Đăng ký tài khoản mới thành công!");
         setShowLoginModal(false);
       } else {
-        toast.error(regRes.error || "Đăng nhập thất bại.");
+        toast.error(res.error || "Đăng ký thất bại.");
+      }
+    } else if (authMode === 'FORGOT') {
+      if (!email.trim()) {
+        toast.error("Vui lòng nhập Email để khôi phục mật khẩu.");
+        return;
+      }
+      setLoading(true);
+      const res = await forgotPassword(email.trim());
+      setLoading(false);
+      if (res.success) {
+        toast.success("Đã gửi liên kết khôi phục mật khẩu tới email của bạn!");
+        setAuthMode('LOGIN');
+      } else {
+        toast.error(res.error || "Gửi yêu cầu thất bại.");
       }
     }
   };
@@ -437,63 +452,177 @@ export default function Layout() {
       {showLoginModal && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
           <div className="relative bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-2xl w-full max-w-md p-6 sm:p-8 shadow-2xl text-left">
+            
+            {/* Header depending on current mode */}
             <div className="text-center mb-6">
               <h2 className="text-xl font-black tracking-tight text-neutral-900 dark:text-white uppercase">
-                Đăng Nhập Hệ Thống
+                {authMode === 'LOGIN' && 'Đăng Nhập'}
+                {authMode === 'REGISTER' && 'Đăng Ký Tài Khoản'}
+                {authMode === 'FORGOT' && 'Quên Mật Khẩu'}
               </h2>
               <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
-                Hệ thống lưu trữ tài khoản trực tiếp trong trình duyệt qua LocalStorage.
+                {authMode === 'LOGIN' && 'Nhập email và mật khẩu của bạn để tiếp tục.'}
+                {authMode === 'REGISTER' && 'Tạo tài khoản mới để bắt đầu cuộc hành trình.'}
+                {authMode === 'FORGOT' && 'Nhập email để nhận liên kết khôi phục mật khẩu.'}
               </p>
             </div>
 
-            <form onSubmit={handleLocalLoginSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-black tracking-widest uppercase text-neutral-500 dark:text-neutral-400 mb-2">
-                  Tên đăng nhập hoặc Email
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Nhập tên tài khoản hoặc email..."
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-800 text-neutral-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black tracking-widest uppercase text-neutral-500 dark:text-neutral-400 mb-2">
-                  Mật khẩu (Mặc định: 123456)
-                </label>
-                <input
-                  type="password"
-                  placeholder="Nhập mật khẩu..."
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-800 text-neutral-900 dark:text-white"
-                />
-              </div>
-
-              {loginEmail.trim().toLowerCase() === 'nhuochy259@gmail.com' && (
-                <div className="p-3 bg-neutral-100 dark:bg-neutral-900 rounded-lg text-xs font-bold text-neutral-600 dark:text-neutral-300">
-                  💡 Email chủ sở hữu: Bạn sẽ đăng nhập với vai trò ADMIN hệ thống.
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              {/* Optional Display Name for registration */}
+              {authMode === 'REGISTER' && (
+                <div>
+                  <label className="block text-xs font-black tracking-widest uppercase text-neutral-500 dark:text-neutral-400 mb-2">
+                    Tên hiển thị (Tùy chọn)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: Lữ Khách Cô Đơn"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-800 text-neutral-900 dark:text-white"
+                  />
                 </div>
               )}
 
+              {/* Email Address */}
+              <div>
+                <label className="block text-xs font-black tracking-widest uppercase text-neutral-500 dark:text-neutral-400 mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="nhap_email@cua_ban.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-800 text-neutral-900 dark:text-white"
+                />
+              </div>
+
+              {/* Password for Login & Register */}
+              {authMode !== 'FORGOT' && (
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-xs font-black tracking-widest uppercase text-neutral-500 dark:text-neutral-400">
+                      Mật khẩu
+                    </label>
+                    {authMode === 'LOGIN' && (
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('FORGOT')}
+                        className="text-xs font-bold text-neutral-400 hover:text-black dark:hover:text-white transition-colors"
+                      >
+                        Quên mật khẩu?
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Nhập mật khẩu..."
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-800 text-neutral-900 dark:text-white"
+                  />
+                </div>
+              )}
+
+              {/* Confirm Password for Register */}
+              {authMode === 'REGISTER' && (
+                <div>
+                  <label className="block text-xs font-black tracking-widest uppercase text-neutral-500 dark:text-neutral-400 mb-2">
+                    Nhập lại mật khẩu
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Xác nhận mật khẩu..."
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-800 text-neutral-900 dark:text-white"
+                  />
+                </div>
+              )}
+
+              {/* Dynamic Hints/Warnings */}
+              {email.trim().toLowerCase() === 'nhuochy259@gmail.com' && (
+                <div className="p-3 bg-neutral-100 dark:bg-neutral-900 rounded-lg text-xs font-bold text-neutral-600 dark:text-neutral-300">
+                  💡 Email quản trị viên: Hệ thống tự gán quyền ADMIN sau khi đăng nhập thành công.
+                </div>
+              )}
+
+              {/* Action buttons */}
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => setShowLoginModal(false)}
-                  className="flex-1 px-4 py-3 bg-neutral-100 dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300 font-bold rounded-xl text-sm hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+                  className="flex-1 px-4 py-3 bg-neutral-100 dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300 font-bold rounded-xl text-sm hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50"
                 >
-                  Hủy
+                  Đóng
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-3 bg-black dark:bg-white text-white dark:text-black font-black rounded-xl text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-md"
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-black dark:bg-white text-white dark:text-black font-black rounded-xl text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Xác nhận
+                  {loading ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      {authMode === 'LOGIN' && 'ĐĂNG NHẬP'}
+                      {authMode === 'REGISTER' && 'ĐĂNG KÝ'}
+                      {authMode === 'FORGOT' && 'GỬI YÊU CẦU'}
+                    </>
+                  )}
                 </button>
+              </div>
+
+              {/* Mode toggles */}
+              <div className="border-t border-neutral-100 dark:border-neutral-900 mt-4 pt-4 text-center text-xs text-neutral-500 dark:text-neutral-400 font-medium">
+                {authMode === 'LOGIN' && (
+                  <div>
+                    Bạn chưa có tài khoản?{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('REGISTER');
+                        setEmail('');
+                        setPassword('');
+                        setConfirmPassword('');
+                        setDisplayName('');
+                      }}
+                      className="font-black text-black dark:text-white underline ml-1"
+                    >
+                      Đăng ký ngay
+                    </button>
+                  </div>
+                )}
+                {authMode === 'REGISTER' && (
+                  <div>
+                    Bạn đã có tài khoản?{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('LOGIN');
+                        setEmail('');
+                        setPassword('');
+                      }}
+                      className="font-black text-black dark:text-white underline ml-1"
+                    >
+                      Đăng nhập
+                    </button>
+                  </div>
+                )}
+                {authMode === 'FORGOT' && (
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('LOGIN')}
+                    className="font-black text-black dark:text-white underline"
+                  >
+                    Quay lại Đăng nhập
+                  </button>
+                )}
               </div>
             </form>
           </div>
