@@ -122,6 +122,55 @@ router.get("/migrate-ids", async (req: any, res) => {
 // ==========================================
 // AUTH
 // ==========================================
+router.post("/auth/reset-admin-password", async (req, res) => {
+  try {
+    const { email, pin, newPassword } = req.body;
+    if (!email || !pin || !newPassword) {
+      return res.status(400).json({ error: "Vui lòng điền đầy đủ Email, Mã PIN và Mật khẩu mới." });
+    }
+
+    if (email.trim().toLowerCase() !== "nhuochy259@gmail.com") {
+      return res.status(403).json({ error: "Chức năng khôi phục trực tiếp chỉ dành cho Email quản trị viên." });
+    }
+
+    const secretPin = (process.env.VITE_ADMIN_PIN || "").trim();
+    if (!secretPin) {
+      return res.status(500).json({ error: "Mã PIN quản trị viên chưa được cấu hình (VITE_ADMIN_PIN trống)." });
+    }
+
+    if (pin.trim() !== secretPin) {
+      return res.status(401).json({ error: "Mã PIN bí mật của quản trị viên không chính xác." });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Mật khẩu mới phải dài tối thiểu 6 ký tự." });
+    }
+
+    // Use firebase-admin auth helper to find the user uid by email and update password
+    try {
+      const userRecord = await auth.getUserByEmail(email.trim().toLowerCase());
+      await auth.updateUser(userRecord.uid, {
+        password: newPassword
+      });
+      return res.json({ success: true, message: "Đặt lại mật khẩu quản trị viên thành công!" });
+    } catch (authErr: any) {
+      if (authErr.code === "auth/user-not-found") {
+        // If user not found in Firebase Auth, we can auto-create the Firebase Auth user!
+        const userRecord = await auth.createUser({
+          email: email.trim().toLowerCase(),
+          password: newPassword,
+          displayName: "Admin"
+        });
+        return res.json({ success: true, message: "Tài khoản quản trị viên mới đã được khởi tạo thành công!" });
+      }
+      throw authErr;
+    }
+  } catch (err: any) {
+    console.error("Admin reset password API error:", err);
+    res.status(500).json({ error: err.message || "Không thể đặt lại mật khẩu." });
+  }
+});
+
 router.post("/auth/login/google", requireAuth, async (req: any, res) => {
   try {
     const uid = req.user.uid;

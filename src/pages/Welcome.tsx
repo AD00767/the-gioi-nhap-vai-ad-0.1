@@ -19,7 +19,8 @@ export default function Welcome() {
   });
 
   const [showLoginModal, setShowLoginModal] = React.useState(false);
-  const [authMode, setAuthMode] = React.useState<'LOGIN' | 'REGISTER' | 'FORGOT'>('LOGIN');
+  const [authMode, setAuthMode] = React.useState<'LOGIN' | 'REGISTER' | 'FORGOT' | 'ADMIN_RESET'>('LOGIN');
+  const [adminPin, setAdminPin] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
@@ -88,6 +89,23 @@ export default function Welcome() {
         setAuthMode('LOGIN');
       } else {
         toast.error(res.error || "Gửi yêu cầu thất bại.");
+      }
+    } else if (authMode === 'ADMIN_RESET') {
+      if (!email.trim() || !adminPin || !password) {
+        toast.error("Vui lòng điền đầy đủ Email, Mã PIN và Mật khẩu mới.");
+        return;
+      }
+      setLoading(true);
+      const { resetAdminPassword } = useAuthStore.getState();
+      const res = await resetAdminPassword(email.trim(), adminPin, password);
+      setLoading(false);
+      if (res.success) {
+        toast.success("Đổi mật khẩu tài khoản Admin thành công! Vui lòng đăng nhập với mật khẩu mới.");
+        setAuthMode('LOGIN');
+        setPassword('');
+        setAdminPin('');
+      } else {
+        toast.error(res.error || "Đặt lại mật khẩu thất bại.");
       }
     }
   };
@@ -177,11 +195,13 @@ export default function Welcome() {
                 {authMode === 'LOGIN' && 'Đăng Nhập'}
                 {authMode === 'REGISTER' && 'Đăng Ký Tài Khoản'}
                 {authMode === 'FORGOT' && 'Quên Mật Khẩu'}
+                {authMode === 'ADMIN_RESET' && 'Khôi Phục Admin Direct'}
               </h2>
               <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
                 {authMode === 'LOGIN' && 'Nhập email và mật khẩu của bạn để tiếp tục.'}
                 {authMode === 'REGISTER' && 'Tạo tài khoản mới để bắt đầu cuộc hành trình.'}
                 {authMode === 'FORGOT' && 'Nhập email để nhận liên kết khôi phục mật khẩu.'}
+                {authMode === 'ADMIN_RESET' && 'Đặt lại mật khẩu trực tiếp bằng mã PIN bí mật.'}
               </p>
             </div>
 
@@ -217,12 +237,29 @@ export default function Welcome() {
                 />
               </div>
 
-              {/* Password for Login & Register */}
+              {/* Admin Secret PIN */}
+              {authMode === 'ADMIN_RESET' && (
+                <div>
+                  <label className="block text-xs font-black tracking-widest uppercase text-neutral-500 dark:text-neutral-400 mb-2">
+                    Mã PIN Admin Bí Mật
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Nhập mã PIN Admin..."
+                    value={adminPin}
+                    onChange={(e) => setAdminPin(e.target.value)}
+                    className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-800 text-neutral-900 dark:text-white"
+                  />
+                </div>
+              )}
+
+              {/* Password for Login, Register & Admin Reset */}
               {authMode !== 'FORGOT' && (
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <label className="block text-xs font-black tracking-widest uppercase text-neutral-500 dark:text-neutral-400">
-                      Mật khẩu
+                      {authMode === 'ADMIN_RESET' ? 'Mật khẩu mới' : 'Mật khẩu'}
                     </label>
                     {authMode === 'LOGIN' && (
                       <button
@@ -237,7 +274,7 @@ export default function Welcome() {
                   <input
                     type="password"
                     required
-                    placeholder="Nhập mật khẩu..."
+                    placeholder={authMode === 'ADMIN_RESET' ? "Nhập mật khẩu mới..." : "Nhập mật khẩu..."}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-neutral-800 text-neutral-900 dark:text-white"
@@ -291,6 +328,7 @@ export default function Welcome() {
                       {authMode === 'LOGIN' && 'ĐĂNG NHẬP'}
                       {authMode === 'REGISTER' && 'ĐĂNG KÝ'}
                       {authMode === 'FORGOT' && 'GỬI YÊU CẦU'}
+                      {authMode === 'ADMIN_RESET' && 'XÁC NHẬN ĐỔI MẬT KHẨU'}
                     </>
                   )}
                 </button>
@@ -333,6 +371,30 @@ export default function Welcome() {
                   </div>
                 )}
                 {authMode === 'FORGOT' && (
+                  <div className="flex flex-col gap-2 items-center">
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode('LOGIN')}
+                      className="font-black text-black dark:text-white underline"
+                    >
+                      Quay lại Đăng nhập
+                    </button>
+                    {email.trim().toLowerCase() === 'nhuochy259@gmail.com' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('ADMIN_RESET');
+                          setAdminPin('');
+                          setPassword('');
+                        }}
+                        className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline mt-2"
+                      >
+                        💡 Bạn là Admin? Nhấp vào đây để đổi mật khẩu bằng PIN Admin trực tiếp
+                      </button>
+                    )}
+                  </div>
+                )}
+                {authMode === 'ADMIN_RESET' && (
                   <button
                     type="button"
                     onClick={() => setAuthMode('LOGIN')}

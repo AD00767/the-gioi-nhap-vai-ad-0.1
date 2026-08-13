@@ -21,6 +21,7 @@ interface AuthState {
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   register: (email: string, password?: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
+  resetAdminPassword: (email: string, pin: string, newPassword?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => void;
 }
@@ -177,6 +178,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         errorMsg = 'Định dạng email không hợp lệ.';
       }
       return { success: false, error: errorMsg };
+    }
+  },
+
+  resetAdminPassword: async (email, pin, newPassword) => {
+    try {
+      if (!email || !pin || !newPassword) {
+        return { success: false, error: 'Vui lòng nhập đầy đủ email, mã PIN và mật khẩu mới.' };
+      }
+      const response = await fetch('/api/auth/reset-admin-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, pin, newPassword }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || 'Yêu cầu thất bại.' };
+      }
+    } catch (err) {
+      console.error("resetAdminPassword API error:", err);
+      return { success: false, error: 'Kết nối máy chủ thất bại.' };
     }
   },
 
