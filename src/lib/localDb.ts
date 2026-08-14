@@ -196,18 +196,27 @@ const STORAGE_KEYS = {
 };
 
 // Helper function to safely parse storage
+const memoryStorage: Record<string, any> = {};
+
 function getStorage<T>(key: string, defaultValue: T): T {
+  if (memoryStorage[key] !== undefined) {
+    return memoryStorage[key];
+  }
   try {
     const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : defaultValue;
+    const parsed = data ? JSON.parse(data) : defaultValue;
+    memoryStorage[key] = parsed;
+    return parsed;
   } catch (e) {
     console.log(`Error reading ${key} from localStorage:`, e);
+    memoryStorage[key] = defaultValue;
     return defaultValue;
   }
 }
 
 // Helper function to safely set storage
 function setStorage<T>(key: string, value: T): void {
+  memoryStorage[key] = value;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
