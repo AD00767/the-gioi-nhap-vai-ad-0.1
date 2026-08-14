@@ -106,6 +106,14 @@ export function makeDocSnapshot(id: string, item: any | null) {
 const memoryCache: Record<string, { data: any, timestamp: number }> = {};
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+export function invalidateCache(colName: string) {
+  Object.keys(memoryCache).forEach(key => {
+    if (key.startsWith(`docs:${colName}`) || key.startsWith(`doc:${colName}`)) {
+      delete memoryCache[key];
+    }
+  });
+}
+
 // Global state to track quota status
 export let isQuotaExceeded = false;
 export const onQuotaExceeded = (callback: (status: boolean) => void) => {
@@ -167,9 +175,18 @@ export async function safeGetDocs(queryOrRef: any): Promise<any> {
     
     // Sync to localDb for future fallbacks
     try {
+      const localItems = findLocalCollection(colName) || [];
+      const localDeletedIds = new Set(localItems.filter((i: any) => i.deletedAt).map((i: any) => i.id || i.uid));
       const items = snap.docs.map(d => {
         const data = d.data() as any;
         return { id: d.id, ...(data || {}) };
+      }).filter((item: any) => {
+        if (localDeletedIds.has(item.id)) return false;
+        const localItem = localItems.find((i: any) => i.id === item.id);
+        if (localItem && localItem.updatedAt && item.updatedAt) {
+           return new Date(localItem.updatedAt).getTime() <= new Date(item.updatedAt).getTime();
+        }
+        return true;
       });
       if (colName === 'users') {
         items.forEach(item => localDb.updateUser(item.id, item));
@@ -267,8 +284,20 @@ export async function safeGetDoc(docRef: any): Promise<any> {
     if (snap.exists()) {
       // Sync to local
       try {
+        const localItems = findLocalCollection(colName) || [];
+        const localItem = localItems.find((i: any) => i.id === snap.id || i.uid === snap.id);
+        if (localItem && localItem.deletedAt) {
+          return makeDocSnapshot(snap.id, null); // Return not exists
+        }
+        if (localItem && localItem.updatedAt && snap.data()?.updatedAt) {
+           if (new Date(localItem.updatedAt).getTime() > new Date(snap.data().updatedAt).getTime()) {
+              return makeDocSnapshot(snap.id, localItem);
+           }
+        }
+        
         const data = snap.data() as any;
         const item = { id: snap.id, ...(data || {}) };
+        
         if (colName === 'users') localDb.updateUser(snap.id, item);
         else if (colName === 'characters') localDb.updateCharacter(snap.id, item);
         else if (colName === 'prompts') localDb.updatePrompt(snap.id, item);
@@ -280,7 +309,7 @@ export async function safeGetDoc(docRef: any): Promise<any> {
     }
 
     const items = findLocalCollection(colName);
-    const item = items.find(i => (i.id || i.uid) === docId);
+    const item = items.find(i => (i.id || i.uid) === docId && !i.deletedAt);
     if (item) return makeDocSnapshot(docId, item);
     return snap;
   } catch (err: any) {
@@ -338,6 +367,7 @@ export function sanitizeData(colName: string, docId: string | null, data: any): 
 
 export async function safeAddDoc(colRef: any, data: any): Promise<any> {
   const colName = getCollectionName(colRef);
+  invalidateCache(colName);
   try {
     const docRef = await addDoc(colRef, data);
     try {
