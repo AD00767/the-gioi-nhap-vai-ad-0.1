@@ -1,3 +1,4 @@
+import { safeAddDoc, safeUpdateDoc, safeDeleteDoc, safeSetDoc , safeGetDocs} from "../../lib/firestoreUtils";
 import React, { useState, useEffect } from 'react';
 import AdminLayout from './AdminLayout';
 import { 
@@ -34,7 +35,7 @@ export default function SupportManager() {
         where('status', '==', filter),
         orderBy('createdAt', 'desc'), limit(100)
       );
-      const snap = await getDocs(q);
+      const snap = await safeGetDocs(q);
       setTickets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err) {
       console.error("Error fetching tickets:", err);
@@ -52,7 +53,7 @@ export default function SupportManager() {
     
     try {
       const ticketRef = doc(db, 'contact_forms', selectedTicket.id);
-      await updateDoc(ticketRef, {
+      await safeUpdateDoc(ticketRef, {
         status: 'RESOLVED',
         moderatorId: currentUser.id,
         moderatorReply: reply,
@@ -60,7 +61,7 @@ export default function SupportManager() {
       });
 
       // Audit Log
-      await addDoc(collection(db, 'audit_logs'), {
+      await safeAddDoc(collection(db, 'audit_logs'), {
         executorId: currentUser.id,
         executorName: currentUser.displayName,
         executorRole: currentUser.role,
@@ -84,7 +85,7 @@ export default function SupportManager() {
   const handleDelete = async (id: string) => {
     if (!window.confirm("Xóa yêu cầu này vĩnh viễn?")) return;
     try {
-      await deleteDoc(doc(db, 'contact_forms', id));
+      await safeDeleteDoc(doc(db, 'contact_forms', id));
       toast.success("Đã xóa.");
       if (selectedTicket?.id === id) setSelectedTicket(null);
       fetchTickets();

@@ -1,3 +1,4 @@
+import { safeAddDoc, safeUpdateDoc, safeDeleteDoc, safeSetDoc , safeGetDocs} from "../../lib/firestoreUtils";
 import React, { useState, useEffect } from 'react';
 import AdminLayout from './AdminLayout';
 import { 
@@ -41,7 +42,7 @@ export default function BadgeManager() {
     setLoading(true);
     try {
       const q = query(collection(db, 'users'), orderBy('displayName'), limit(100));
-      const snap = await getDocs(q);
+      const snap = await safeGetDocs(q);
       const allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setUsers(allUsers.filter((u: any) => 
         u.displayName.toLowerCase().includes(search.toLowerCase()) ||
@@ -58,13 +59,13 @@ export default function BadgeManager() {
     try {
       const userRef = doc(db, 'users', userId);
       if (hasBadge) {
-        await updateDoc(userRef, {
+        await safeUpdateDoc(userRef, {
           badges: arrayRemove(badgeId),
           updatedAt: serverTimestamp()
         });
         toast.success("Đã gỡ Badge.");
       } else {
-        await updateDoc(userRef, {
+        await safeUpdateDoc(userRef, {
           badges: arrayUnion(badgeId),
           updatedAt: serverTimestamp()
         });
@@ -72,7 +73,7 @@ export default function BadgeManager() {
       }
 
       // Audit Log
-      await addDoc(collection(db, 'audit_logs'), {
+      await safeAddDoc(collection(db, 'audit_logs'), {
         executorId: currentUser.id,
         executorName: currentUser.displayName,
         executorRole: currentUser.role,

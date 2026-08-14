@@ -234,7 +234,8 @@ export async function safeGetDocs(queryOrRef: any): Promise<any> {
 
     try {
       const items = findLocalCollection(colName);
-      const fallbackSnap = makeQuerySnapshot(items);
+      const matchedItems = items.filter(item => matchesQueryString(item, queryStr) && !item.deletedAt);
+      const fallbackSnap = makeQuerySnapshot(matchedItems);
       return fallbackSnap;
     } catch (innerErr) {
       console.error("[Firestore Safe Wrapper] getDocs fallback error:", innerErr);
@@ -304,33 +305,65 @@ export async function safeGetDoc(docRef: any): Promise<any> {
   }
 }
 
+export function sanitizeData(colName: string, docId: string | null, data: any): any {
+  if (!data) return data;
+  let existingData: any = null;
+  if (docId) {
+    const col = findLocalCollection(colName) || [];
+    existingData = col.find((x: any) => x.id === docId || x.uid === docId);
+  }
+  const result = { ...data };
+  for (const key in result) {
+    const val = result[key];
+    if (val && typeof val === 'object' && val._methodName) {
+      if (val._methodName === 'serverTimestamp') {
+        result[key] = new Date().toISOString();
+      } else if (val._methodName === 'increment') {
+        const inc = val._operand !== undefined ? val._operand : (val.operand !== undefined ? val.operand : 0);
+        const cur = existingData ? (Number(existingData[key]) || 0) : 0;
+        result[key] = cur + inc;
+      } else if (val._methodName === 'arrayUnion') {
+        const els = val._elements || val.elements || [];
+        const arr = existingData && Array.isArray(existingData[key]) ? existingData[key] : [];
+        result[key] = [...new Set([...arr, ...els])];
+      } else if (val._methodName === 'arrayRemove') {
+        const els = val._elements || val.elements || [];
+        const arr = existingData && Array.isArray(existingData[key]) ? existingData[key] : [];
+        result[key] = arr.filter((e: any) => !els.includes(e));
+      }
+    }
+  }
+  return result;
+}
+
 export async function safeAddDoc(colRef: any, data: any): Promise<any> {
   const colName = getCollectionName(colRef);
   try {
     const docRef = await addDoc(colRef, data);
     try {
+      const cleanData = sanitizeData(colName, null, data);
       if (colName === 'feedbacks') {
-        localDb.createFeedback({ ...data, id: docRef.id });
+        localDb.createFeedback({ ...cleanData, id: docRef.id });
       } else if (colName === 'prompts') {
-        localDb.createPrompt({ ...data, id: docRef.id });
+        localDb.createPrompt({ ...cleanData, id: docRef.id });
       } else if (colName === 'characters') {
-        localDb.createCharacter({ ...data, id: docRef.id });
+        localDb.createCharacter({ ...cleanData, id: docRef.id });
       } else if (colName === 'comments') {
-        localDb.createComment({ ...data, id: docRef.id });
+        localDb.createComment({ ...cleanData, id: docRef.id });
       } else if (colName === 'notifications') {
-        localDb.addNotification({ ...data, id: docRef.id });
+        localDb.addNotification({ ...cleanData, id: docRef.id });
       } else if (colName === 'reports') {
-        localDb.createReport({ ...data, id: docRef.id });
+        localDb.createReport({ ...cleanData, id: docRef.id });
       } else if (colName === 'bookmarks') {
-        localDb.createBookmark({ ...data, id: docRef.id });
+        localDb.createBookmark({ ...cleanData, id: docRef.id });
       } else if (colName === 'follows') {
-        localDb.createFollow({ ...data, id: docRef.id });
+        localDb.createFollow({ ...cleanData, id: docRef.id });
       } else if (colName === 'creator_requests') {
-        localDb.createCreatorRequest({ ...data, id: docRef.id });
+        localDb.createCreatorRequest({ ...cleanData, id: docRef.id });
       } else if (colName === 'creator_appeals') {
-        localDb.createCreatorAppeal({ ...data, id: docRef.id });
+        localDb.createCreatorAppeal({ ...cleanData, id: docRef.id });
       } else if (colName === 'support_tickets') {
-        localDb.createSupportTicket({ ...data, id: docRef.id });
+        localDb.createSupportTicket({ ...cleanData, id: docRef.id });
       }
     } catch (localErr) {
       console.log("Local sync failed after Firestore add:", localErr);
@@ -339,30 +372,31 @@ export async function safeAddDoc(colRef: any, data: any): Promise<any> {
   } catch (err: any) {
     console.log("[Firestore Safe Wrapper] addDoc failed, fallback local ID:", err?.message || err);
     const newId = colName + '_' + Math.random().toString(36).substring(2, 9);
+    const cleanData = sanitizeData(colName, null, data);
     
     // Add to localDb if possible
     if (colName === 'feedbacks') {
-      localDb.createFeedback({ ...data, id: newId });
+      localDb.createFeedback({ ...cleanData, id: newId });
     } else if (colName === 'prompts') {
-      localDb.createPrompt({ ...data, id: newId });
+      localDb.createPrompt({ ...cleanData, id: newId });
     } else if (colName === 'characters') {
-      localDb.createCharacter({ ...data, id: newId });
+      localDb.createCharacter({ ...cleanData, id: newId });
     } else if (colName === 'comments') {
-      localDb.createComment({ ...data, id: newId });
+      localDb.createComment({ ...cleanData, id: newId });
     } else if (colName === 'notifications') {
-      localDb.addNotification({ ...data, id: newId });
+      localDb.addNotification({ ...cleanData, id: newId });
     } else if (colName === 'reports') {
-      localDb.createReport({ ...data, id: newId });
+      localDb.createReport({ ...cleanData, id: newId });
     } else if (colName === 'bookmarks') {
-      localDb.createBookmark({ ...data, id: newId });
+      localDb.createBookmark({ ...cleanData, id: newId });
     } else if (colName === 'follows') {
-      localDb.createFollow({ ...data, id: newId });
+      localDb.createFollow({ ...cleanData, id: newId });
     } else if (colName === 'creator_requests') {
-      localDb.createCreatorRequest({ ...data, id: newId });
+      localDb.createCreatorRequest({ ...cleanData, id: newId });
     } else if (colName === 'creator_appeals') {
-      localDb.createCreatorAppeal({ ...data, id: newId });
+      localDb.createCreatorAppeal({ ...cleanData, id: newId });
     } else if (colName === 'support_tickets') {
-      localDb.createSupportTicket({ ...data, id: newId });
+      localDb.createSupportTicket({ ...cleanData, id: newId });
     }
 
     return { id: newId };
@@ -379,19 +413,21 @@ export async function safeUpdateDoc(docRef: any, data: any): Promise<any> {
     console.log("[Firestore Safe Wrapper] updateDoc failed, fallback local update:", err?.message || err);
   }
 
+  const cleanData = sanitizeData(colName, docId, data);
+  
   // Always sync localDb to ensure UI state remains consistent even when Firestore errors
   if (colName === 'feedbacks') {
-    localDb.updateFeedback(docId, data);
+    localDb.updateFeedback(docId, cleanData);
   } else if (colName === 'prompts') {
-    localDb.updatePrompt(docId, data);
+    localDb.updatePrompt(docId, cleanData);
   } else if (colName === 'characters') {
-    localDb.updateCharacter(docId, data);
+    localDb.updateCharacter(docId, cleanData);
   } else if (colName === 'users') {
-    localDb.updateUser(docId, data);
+    localDb.updateUser(docId, cleanData);
   } else if (colName === 'comments') {
-    localDb.updateComment(docId, data);
+    localDb.updateComment(docId, cleanData);
   } else if (colName === 'creator_requests') {
-    localDb.updateCreatorRequest(docId, data);
+    localDb.updateCreatorRequest(docId, cleanData);
   }
 }
 
@@ -431,9 +467,11 @@ export async function safeSetDoc(docRef: any, data: any, options?: any): Promise
     console.log("[Firestore Safe Wrapper] setDoc failed, fallback local set:", err?.message || err);
   }
 
+  const cleanData = sanitizeData(colName, docId, data);
+
   if (colName === 'users') {
-    localDb.updateUser(docId, data);
+    localDb.updateUser(docId, cleanData);
   } else if (colName === 'creator_requests') {
-    localDb.updateCreatorRequest(docId, data);
+    localDb.updateCreatorRequest(docId, cleanData);
   }
 }

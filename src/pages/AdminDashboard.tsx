@@ -1,3 +1,4 @@
+import { safeAddDoc, safeUpdateDoc, safeDeleteDoc, safeSetDoc , safeGetDocs} from "../lib/firestoreUtils";
 import React, { useState, useEffect } from 'react';
 import AdminLayout from './admin/AdminLayout';
 import { 
@@ -32,15 +33,15 @@ export default function AdminDashboard() {
     try {
       if (activeTab === 'characters') {
         const q = query(collection(db, 'characters'), orderBy('createdAt', 'desc'), limit(100));
-        const snap = await getDocs(q);
+        const snap = await safeGetDocs(q);
         setCharacters(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       } else if (activeTab === 'prompts') {
         const q = query(collection(db, 'prompts'), orderBy('createdAt', 'desc'), limit(100));
-        const snap = await getDocs(q);
+        const snap = await safeGetDocs(q);
         setPrompts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       } else if (activeTab === 'feedbacks') {
         const q = query(collection(db, 'feedbacks'), where('mode', '==', 'PUBLIC'), limit(100));
-        const snap = await getDocs(q);
+        const snap = await safeGetDocs(q);
         const fbList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         fbList.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         setFeedbacks(fbList);
@@ -56,7 +57,7 @@ export default function AdminDashboard() {
   const logAction = async (action: string, targetId: string, details: string) => {
     try {
       if (!currentUser) return;
-      await addDoc(collection(db, 'audit_logs'), {
+      await safeAddDoc(collection(db, 'audit_logs'), {
         executorId: currentUser.id,
         executorName: currentUser.displayName,
         executorRole: currentUser.role,
@@ -73,7 +74,7 @@ export default function AdminDashboard() {
 
   const handleToggleHide = async (id: string, currentStatus: boolean, collectionName: string) => {
     try {
-      await updateDoc(doc(db, collectionName, id), {
+      await safeUpdateDoc(doc(db, collectionName, id), {
         isHidden: !currentStatus
       });
       await logAction('TOGGLE_VISIBILITY', id, `${currentStatus ? 'Hiển thị' : 'Ẩn'} nội dung trong ${collectionName}`);
@@ -88,7 +89,7 @@ export default function AdminDashboard() {
     if (!window.confirm("Bạn có chắc chắn muốn xóa vĩnh viễn nội dung này? Hành động này không thể hoàn tác.")) return;
     try {
       // Soft Delete
-      await updateDoc(doc(db, collectionName, id), {
+      await safeUpdateDoc(doc(db, collectionName, id), {
         deletedAt: new Date().toISOString()
       });
       await logAction('DELETE_CONTENT', id, `Xóa nội dung trong ${collectionName}`);

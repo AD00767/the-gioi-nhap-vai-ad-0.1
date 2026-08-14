@@ -1,3 +1,4 @@
+import { safeGetDocs } from '../../lib/firestoreUtils';
 import React, { useState, useEffect } from 'react';
 import AdminLayout from './AdminLayout';
 import { 
@@ -42,7 +43,7 @@ export default function AuditLogs() {
         q = query(q, startAfter(lastDoc));
       }
 
-      const snap = await getDocs(q);
+      const snap = await safeGetDocs(q);
       const newLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }) as AuditLogItem);
       
       if (isNew) {

@@ -1,3 +1,4 @@
+import { safeAddDoc, safeUpdateDoc, safeDeleteDoc, safeSetDoc , safeGetDocs} from "../../lib/firestoreUtils";
 import React, { useState, useEffect } from 'react';
 import AdminLayout from './AdminLayout';
 import { 
@@ -42,8 +43,8 @@ export default function AdminModeratorManager() {
       );
       
       const [snap, snapInvites] = await Promise.all([
-        getDocs(q),
-        getDocs(qInvites)
+        safeGetDocs(q),
+        safeGetDocs(qInvites)
       ]);
 
       const map = new Map<string, any>();
@@ -69,7 +70,7 @@ export default function AdminModeratorManager() {
     setLoading(true);
     try {
       const q = query(collection(db, 'users'), where('email', '==', searchEmail.trim()));
-      const snap = await getDocs(q);
+      const snap = await safeGetDocs(q);
       if (snap.empty) {
         toast.error("Không tìm thấy người dùng.");
         setFoundUser(null);
@@ -92,12 +93,12 @@ export default function AdminModeratorManager() {
     try {
       if (newRole === 'MODERATOR') {
         // Invite instead of immediate promote
-        await updateDoc(doc(db, 'users', userId), {
+        await safeUpdateDoc(doc(db, 'users', userId), {
           moderatorInviteStatus: 'PENDING',
           updatedAt: serverTimestamp()
         });
 
-        await addDoc(collection(db, 'notifications'), {
+        await safeAddDoc(collection(db, 'notifications'), {
           userId: userId,
           recipientId: userId,
           type: 'MODERATOR_INVITE',
@@ -107,7 +108,7 @@ export default function AdminModeratorManager() {
           createdAt: new Date().toISOString()
         });
 
-        await addDoc(collection(db, 'audit_logs'), {
+        await safeAddDoc(collection(db, 'audit_logs'), {
           executorId: currentUser.id,
           executorName: currentUser.displayName,
           executorRole: currentUser.role,
@@ -126,7 +127,7 @@ export default function AdminModeratorManager() {
         return;
       }
 
-      await updateDoc(doc(db, 'users', userId), {
+      await safeUpdateDoc(doc(db, 'users', userId), {
         role: newRole,
         permissions: newRole === 'ADMIN' ? ['ALL'] : ['MANAGE_REPORTS', 'MANAGE_CONTENT', 'MANAGE_USERS'],
         updatedAt: serverTimestamp(),
@@ -134,7 +135,7 @@ export default function AdminModeratorManager() {
         moderatorInviteStatus: null
       });
 
-      await addDoc(collection(db, 'audit_logs'), {
+      await safeAddDoc(collection(db, 'audit_logs'), {
         executorId: currentUser.id,
         executorName: currentUser.displayName,
         executorRole: currentUser.role,

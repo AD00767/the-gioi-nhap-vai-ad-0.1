@@ -1,3 +1,4 @@
+import { safeAddDoc, safeUpdateDoc, safeDeleteDoc, safeSetDoc , safeGetDocs} from "../../lib/firestoreUtils";
 import React, { useState, useEffect } from 'react';
 import AdminLayout from './AdminLayout';
 import { 
@@ -45,7 +46,7 @@ export default function ReportQueue() {
           orderBy('createdAt', 'desc'), limit(200)
         );
       }
-      const snap = await getDocs(q);
+      const snap = await safeGetDocs(q);
       setReports(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }) as ReportItem));
     } catch (err) {
       console.error("Error fetching reports:", err);
@@ -69,7 +70,7 @@ export default function ReportQueue() {
         }
       }
 
-      await updateDoc(reportRef, {
+      await safeUpdateDoc(reportRef, {
         status: 'REVIEWING',
         claimedBy: currentUser.id,
         claimedByName: currentUser.displayName,
@@ -96,7 +97,7 @@ export default function ReportQueue() {
   const handleUnclaim = async (reportId: string) => {
     try {
       const reportRef = doc(db, 'reports', reportId);
-      await updateDoc(reportRef, {
+      await safeUpdateDoc(reportRef, {
         status: 'PENDING',
         claimedBy: null,
         claimedByName: null,
@@ -125,7 +126,7 @@ export default function ReportQueue() {
     
     try {
       const reportRef = doc(db, 'reports', selectedReport.id);
-      await updateDoc(reportRef, {
+      await safeUpdateDoc(reportRef, {
         status,
         moderatorId: currentUser.id,
         moderatorNote: note,
@@ -133,7 +134,7 @@ export default function ReportQueue() {
       });
 
       // Audit Log
-      await addDoc(collection(db, 'audit_logs'), {
+      await safeAddDoc(collection(db, 'audit_logs'), {
         executorId: currentUser.id,
         executorName: currentUser.displayName,
         executorRole: currentUser.role,
@@ -164,13 +165,13 @@ export default function ReportQueue() {
       const collectionName = selectedReport.targetType === 'CHARACTER' ? 'characters' : 
                             selectedReport.targetType === 'PROMPT' ? 'prompts' : 'comments';
       
-      await deleteDoc(doc(db, collectionName, selectedReport.targetId));
+      await safeDeleteDoc(doc(db, collectionName, selectedReport.targetId));
       
       // Also resolve the report as RESOLVED
       await handleResolve('RESOLVED');
       
       // Audit Log for deletion
-      await addDoc(collection(db, 'audit_logs'), {
+      await safeAddDoc(collection(db, 'audit_logs'), {
         executorId: currentUser.id,
         executorName: currentUser.displayName,
         executorRole: currentUser.role,
