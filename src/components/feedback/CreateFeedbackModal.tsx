@@ -86,8 +86,7 @@ export default function CreateFeedbackModal({
   if (!isOpen) return null;
 
   const filteredUsers = usersList.filter(u =>
-    u.displayName.toLowerCase().includes(recipientSearch.toLowerCase()) ||
-    (u.email && u.email.toLowerCase().includes(recipientSearch.toLowerCase()))
+    u.displayName.toLowerCase().includes(recipientSearch.toLowerCase())
   );
 
   // File drop & select handlers
@@ -345,7 +344,7 @@ export default function CreateFeedbackModal({
                   <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" />
                   <input
                     type="text"
-                    placeholder="Nhập tên hoặc email của thành viên, Creator cần gửi..."
+                    placeholder="Nhập tên thành viên hoặc Creator cần gửi..."
                     value={recipientSearch}
                     onChange={e => setRecipientSearch(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 text-sm rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 focus:outline-none focus:border-black dark:focus:border-white focus:ring-1 focus:ring-black dark:focus:ring-white transition-all"
@@ -386,7 +385,6 @@ export default function CreateFeedbackModal({
                                 Creator
                               </span>
                             )}
-                            <p className="text-[10px] text-neutral-400 mt-0.5">{u.email}</p>
                           </div>
                         </div>
                         <span className="px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 text-[10px] font-bold text-neutral-600 dark:text-neutral-400 rounded-lg group-hover:bg-indigo-500 group-hover:text-white transition-all">

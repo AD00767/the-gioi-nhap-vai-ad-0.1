@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { logout, db } from '../lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc } from 'firebase/firestore';
+import { safeSetDoc } from '../lib/firestoreUtils';
 import { applyTheme, applyFontSize, ThemeMode, FontSize } from '../lib/themeFont';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -79,9 +80,9 @@ export default function Settings() {
 
     if (user?.id) {
       try {
-        await updateDoc(doc(db, 'users', user.id), {
+        await safeSetDoc(doc(db, 'users', user.id), {
           themePreference: mode
-        });
+        }, { merge: true });
       } catch (err) {
         console.error("Failed to save theme preference to user profile:", err);
       }
@@ -106,9 +107,9 @@ export default function Settings() {
 
     if (user?.id) {
       try {
-        await updateDoc(doc(db, 'users', user.id), {
+        await safeSetDoc(doc(db, 'users', user.id), {
           notificationPreferences: updated
-        });
+        }, { merge: true });
       } catch (err) {
         console.error("Firestore update error:", err);
       }

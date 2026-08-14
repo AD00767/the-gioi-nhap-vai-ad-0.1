@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, Send, CheckCircle2, Clock, Sparkles, Facebook, Instagram, Music, MessageSquare, Plus, Trash2, Globe } from 'lucide-react';
-import { doc, updateDoc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { safeSetDoc, safeGetDoc, invalidateCache } from '../../lib/firestoreUtils';
+import { updateUser } from '../../lib/localDb';
 import { useAuthStore } from '../../store/useAuthStore';
 import { evaluateUserBadges, BADGE_DEFINITIONS } from '../../lib/badges';
 import toast from 'react-hot-toast';
@@ -48,7 +50,7 @@ export default function EditProfileModal({ isOpen, onClose, onSaveSuccess }: Edi
       const checkRequest = async () => {
         try {
           const reqRef = doc(db, 'creator_requests', user.id);
-          const reqSnap = await getDoc(reqRef);
+          const reqSnap = await safeGetDoc(reqRef);
           if (reqSnap.exists()) {
             const data = reqSnap.data();
             setRequestStatus(data.status || 'IDLE');
@@ -119,8 +121,8 @@ export default function EditProfileModal({ isOpen, onClose, onSaveSuccess }: Edi
         updatedAt: new Date().toISOString()
       };
 
-      await setDoc(doc(db, 'creator_requests', user.id), reqData);
-      await updateDoc(doc(db, 'users', user.id), { creatorRequestStatus: 'PENDING' });
+      await safeSetDoc(doc(db, 'creator_requests', user.id), reqData, { merge: true });
+      await safeSetDoc(doc(db, 'users', user.id), { creatorRequestStatus: 'PENDING' }, { merge: true });
 
       setRequestStatus('PENDING');
       toast.success("Đã gửi yêu cầu trở thành Creator tới Quản trị viên (Admin)!");
@@ -165,7 +167,7 @@ export default function EditProfileModal({ isOpen, onClose, onSaveSuccess }: Edi
     try {
       const updatedData = {
         displayName: displayName.trim(),
-        avatar,
+        avatar: avatar || user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
         bio: bio.trim(),
         statusMessage: statusMessage.trim(),
         socialLinks: {
@@ -178,17 +180,29 @@ export default function EditProfileModal({ isOpen, onClose, onSaveSuccess }: Edi
         updatedAt: new Date().toISOString()
       };
 
-      const userRef = doc(db, 'users', user.id);
-      await updateDoc(userRef, updatedData);
+      const updatedUser = {
+        ...user,
+        ...updatedData
+      };
 
-      // Update local state
-      setAuth(firebaseUser, { ...user, ...updatedData });
+      // 1. Update local storage user record
+      updateUser(user.id, updatedData);
+
+      // 2. Safely merge update to Firestore
+      const userRef = doc(db, 'users', user.id);
+      await safeSetDoc(userRef, updatedData, { merge: true });
+
+      // 3. Clear users cache
+      invalidateCache('users');
+
+      // 4. Update Zustand state
+      setAuth(firebaseUser, updatedUser);
 
       toast.success("Cập nhật hồ sơ thành công!");
       onSaveSuccess();
       onClose();
     } catch (err: any) {
-      console.error(err);
+      console.error("Lỗi cập nhật hồ sơ:", err);
       toast.error("Không thể cập nhật hồ sơ: " + (err.message || "Lỗi không xác định"));
     } finally {
       setSaving(false);

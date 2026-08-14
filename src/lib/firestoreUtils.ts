@@ -289,8 +289,9 @@ export async function safeGetDoc(docRef: any): Promise<any> {
         if (localItem && localItem.deletedAt) {
           return makeDocSnapshot(snap.id, null); // Return not exists
         }
-        if (localItem && localItem.updatedAt && snap.data()?.updatedAt) {
-           if (new Date(localItem.updatedAt).getTime() > new Date(snap.data().updatedAt).getTime()) {
+        const snapData = snap.data() as Record<string, any> | undefined;
+        if (localItem && localItem.updatedAt && snapData?.updatedAt) {
+           if (new Date(localItem.updatedAt).getTime() > new Date(snapData.updatedAt).getTime()) {
               return makeDocSnapshot(snap.id, localItem);
            }
         }
